@@ -5,6 +5,8 @@ import polars as pl
 import plotly.graph_objects as go
 from typing import Optional
 
+from src.utils import get_trade_type, format_trade_row
+
 
 def build_candlestick_chart(
     price_df: pl.DataFrame,
@@ -62,21 +64,23 @@ def build_candlestick_chart(
                 color='green',
                 line=dict(color='darkgreen', width=1)
             ),
-            text=['买入'] * len(buy_trades),
+            text=[get_trade_type(row['size']) for row in buy_trades.iter_rows(named=True)],
             textposition='top center',
             name='买入点'
         ))
 
     # Add sell markers (red down arrow) with return rate annotation
     if len(sell_trades) > 0:
-        sell_dates = sell_trades['date'].to_list()
-        sell_prices = sell_trades['price'].to_list()
-        pnlcomm_values = sell_trades['pnlcomm'].to_list()
+        sell_rows_list = list(sell_trades.iter_rows(named=True))
+        sell_dates = [row['date'] for row in sell_rows_list]
+        sell_prices = [row['price'] for row in sell_rows_list]
+        trade_types = [get_trade_type(row['size']) for row in sell_rows_list]
+        pnlcomm_values = [row['pnlcomm'] for row in sell_rows_list]
 
         # Format return rate text
         return_texts = [
-            f"卖出\n{p:+.2f}" if p != 0 else "卖出"
-            for p in pnlcomm_values
+            f"{t}\n{p:+.2f}" if p != 0 else t
+            for t, p in zip(trade_types, pnlcomm_values)
         ]
 
         fig.add_trace(go.Scatter(
@@ -130,16 +134,4 @@ def get_trade_table_data(trade_df: pl.DataFrame) -> list:
     Returns:
         List of row dicts with formatted values
     """
-    rows = []
-    for row in trade_df.iter_rows(named=True):
-        row_data = {
-            '日期': str(row['date']),
-            '类型': '买入' if row['size'] > 0 else '卖出',
-            '价格': f"{row['price']:.2f}",
-            '仓位': abs(row['size']),
-            '手续费': f"{row['comm']:.2f}",
-            'pnl': f"{row['pnl']:.2f}",
-            'pnlcomm': f"{row['pnlcomm']:.2f}"
-        }
-        rows.append(row_data)
-    return rows
+    return [format_trade_row(row) for row in trade_df.iter_rows(named=True)]

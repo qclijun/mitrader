@@ -43,7 +43,7 @@ def format_trade_row(row: dict) -> dict:
         Formatted dict with display-friendly values
     """
     return {
-        '日期': row['date'],
+        '日期': str(row['date']),
         '类型': get_trade_type(row['size']),
         '价格': f"{row['price']:.2f}",
         '仓位': abs(row['size']),
