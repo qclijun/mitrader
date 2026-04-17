@@ -3,7 +3,6 @@ Plotly chart building module for K-line visualization.
 """
 import polars as pl
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from typing import Optional
 
 
