@@ -6,7 +6,7 @@
 
 **Architecture:** 侧边栏包含数据加载、资产选择、日期控制；主区域显示 K 线图（占页面 70%+）和可折叠的交易详情表格。数据用 Polars 处理，图表用 Plotly 生成。
 
-**Tech Stack:** Streamlit, Plotly, Polars
+**Tech Stack:** Streamlit, Plotly, Polars, uv (依赖管理)
 
 ---
 
@@ -20,7 +20,8 @@ mitrader/
 │   ├── data_loader.py        # 加载 CSV/Parquet，验证数据，获取资产列表
 │   ├── chart_builder.py      # 构建 Plotly K 线图，添加买卖点标注
 │   └── utils.py              # 计算收益率百分比等辅助函数
-├── requirements.txt          # 依赖列表
+├── pyproject.toml            # 项目配置和依赖（uv 管理）
+├── uv.lock                   # 锁定的依赖版本
 ├── sample_data/              # 示例数据（已存在）
 └── docs/
     └── superpowers/
@@ -30,39 +31,52 @@ mitrader/
 
 ---
 
-### Task 1: 项目初始化与依赖管理
+### Task 1: 项目初始化与依赖管理（使用 uv）
 
 **Files:**
-- Create: `requirements.txt`
+- Create: `pyproject.toml`
 - Create: `src/__init__.py`
+- Create: `.python-version`
+- Create: `uv.lock`
 
-- [ ] **Step 1: 创建 requirements.txt**
+- [ ] **Step 1: 使用 uv 初始化项目**
 
-```txt
-streamlit>=1.28.0
-plotly>=5.18.0
-polars>=0.20.0
+```bash
+uv init --name mitrader
 ```
 
-- [ ] **Step 2: 创建 src 目录和 __init__.py**
+- [ ] **Step 2: 使用 uv 添加依赖**
+
+```bash
+uv add streamlit plotly polars
+```
+
+- [ ] **Step 3: 创建 src 目录结构**
 
 ```bash
 mkdir -p src
 touch src/__init__.py
 ```
 
-- [ ] **Step 3: 验证环境**
+- [ ] **Step 4: 验证 pyproject.toml 内容**
 
-运行命令验证依赖可安装（如果已安装则跳过）：
-```bash
-pip install -r requirements.txt
+确认 pyproject.toml 包含以下依赖：
+```toml
+[project]
+name = "mitrader"
+version = "0.1.0"
+dependencies = [
+    "streamlit",
+    "plotly",
+    "polars",
+]
 ```
 
-- [ ] **Step 4: 提交**
+- [ ] **Step 5: 提交**
 
 ```bash
-git add requirements.txt src/__init__.py
-git commit -m "chore: init project structure and dependencies"
+git add pyproject.toml uv.lock src/__init__.py .python-version
+git commit -m "chore: init project with uv and dependencies"
 ```
 
 ---
@@ -562,7 +576,7 @@ def main():
             
             filtered_list = filter_assets(st.session_state.asset_list, search_term)
             
-            # Display asset list as clickable dataframe
+            # Display asset list as dataframe
             if len(filtered_list) > 0:
                 st.dataframe(
                     filtered_list,
@@ -644,13 +658,6 @@ def main():
         with st.expander('交易详情', expanded=False):
             table_data = get_trade_table_data(asset_trades)
             
-            # Highlight buy/sell rows
-            def highlight_row(row):
-                if row['类型'] == '买入':
-                    return ['background-color: #e6ffe6'] * len(row)
-                else:
-                    return ['background-color: #ffe6e6'] * len(row)
-            
             st.dataframe(
                 table_data,
                 use_container_width=True,
@@ -682,7 +689,7 @@ git commit -m "feat: add Streamlit main application with sidebar layout"
 - [ ] **Step 1: 启动应用**
 
 ```bash
-streamlit run app.py
+uv run streamlit run app.py
 ```
 
 预期结果：浏览器自动打开 http://localhost:8501，显示侧边栏和主内容区布局。
@@ -715,13 +722,13 @@ streamlit run app.py
 ### 安装依赖
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 启动应用
 
 ```bash
-streamlit run app.py
+uv run streamlit run app.py
 ```
 
 浏览器将自动打开 http://localhost:8501
@@ -769,13 +776,3 @@ git commit -m "docs: add usage instructions to README"
 - `load_trade_data` 返回 `pl.DataFrame` → `get_asset_list` 接收 `pl.DataFrame` ✓
 - `get_asset_trades` 返回 `pl.DataFrame` → `build_candlestick_chart` 接收 `pl.DataFrame` ✓
 - `get_trade_table_data` 返回 `list` → Streamlit `st.dataframe` 接收 `list` ✓
-
----
-
-Plan complete and saved to `docs/superpowers/plans/2026-04-17-kline-visualization.md`. Two execution options:
-
-**1. Subagent-Driven (推荐)** - 我为每个任务派遣独立的子代理，任务间进行审查，快速迭代
-
-**2. Inline Execution** - 在当前会话中使用 executing-plans 执行，批量执行并在检查点暂停审查
-
-选择哪种方式？
