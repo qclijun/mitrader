@@ -55,6 +55,14 @@ def format_trade_row(row: dict) -> dict:
     Returns:
         Formatted dict with display-friendly values
     """
+    # Calculate return percentage only for complete close sells (curr_size == 0)
+    if row['size'] < 0 and row['curr_size'] == 0:
+        return_pct = calculate_return_percentage(
+            row['pnl'], row['pnlcomm'], row['price'], row['size']
+        )
+    else:
+        return_pct = "-"
+
     return {
         '日期': str(row['date']),
         '类型': get_trade_type(row['size']),
@@ -62,5 +70,6 @@ def format_trade_row(row: dict) -> dict:
         '仓位': abs(row['size']),
         '手续费': f"{row['comm']:.2f}",
         'pnl': f"{row['pnl']:.2f}",
-        'pnlcomm': f"{row['pnlcomm']:.2f}"
+        'pnlcomm': f"{row['pnlcomm']:.2f}",
+        '收益率': return_pct
     }
