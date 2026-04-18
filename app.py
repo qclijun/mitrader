@@ -84,7 +84,7 @@ def main():
 
             filtered_list = filter_assets(st.session_state.asset_list, search_term)
 
-            # Display asset list as dataframe (row click updates selectbox)
+            # Display asset list as dataframe (single-row click selects asset)
             if len(filtered_list) > 0:
                 event = st.dataframe(
                     filtered_list,
@@ -102,23 +102,15 @@ def main():
 
                 # Row click → update session state
                 if event.selection.rows:
-                    clicked_id = filtered_list['asset_id'][event.selection.rows[0]]
-                    st.session_state.selected_asset_id = clicked_id
+                    st.session_state.selected_asset_id = filtered_list['asset_id'][event.selection.rows[0]]
 
-                # Sync selectbox default with session state
+                # Default to first row if nothing selected yet (or selection no longer in list)
                 asset_ids = filtered_list['asset_id'].to_list()
-                default_idx = 0
-                if st.session_state.selected_asset_id in asset_ids:
-                    default_idx = asset_ids.index(st.session_state.selected_asset_id)
+                if st.session_state.selected_asset_id not in asset_ids:
+                    st.session_state.selected_asset_id = asset_ids[0]
 
-                selected_asset = st.selectbox(
-                    '选择资产',
-                    options=asset_ids,
-                    index=default_idx,
-                    help='选择要查看的资产；也可单击上方列表中的行'
-                )
-                # Keep session state in sync with selectbox
-                st.session_state.selected_asset_id = selected_asset
+                selected_asset = st.session_state.selected_asset_id
+                st.caption(f'当前选中：{selected_asset}')
             else:
                 st.warning('没有匹配的资产')
                 selected_asset = None
