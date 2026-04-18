@@ -31,10 +31,11 @@ def load_trade_data(file_path: str) -> pl.DataFrame:
     if missing:
         raise ValueError(f"Missing required columns in trade.csv: {missing}")
 
-    # Parse date column
+    # Parse date columns and cast asset to string for bond_id matching
     df = df.with_columns(
         pl.col('date').str.to_date('%Y-%m-%d').alias('date'),
-        pl.col('open_datetime').str.to_date('%Y-%m-%d').alias('open_datetime')
+        pl.col('open_datetime').str.to_date('%Y-%m-%d').alias('open_datetime'),
+        pl.col('asset').cast(pl.String).alias('asset')
     )
 
     return df
