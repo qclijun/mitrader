@@ -17,7 +17,8 @@ from src.data_loader import (
 )
 from src.chart_builder import (
     build_candlestick_chart,
-    get_trade_table_data
+    get_trade_table_data,
+    style_trade_table
 )
 
 
@@ -177,9 +178,10 @@ def main():
         # Trade details table (collapsible)
         with st.expander('交易详情', expanded=False):
             table_data = get_trade_table_data(asset_trades)
+            styled_table = style_trade_table(table_data)
 
             st.dataframe(
-                table_data,
+                styled_table,
                 use_container_width=True,
                 hide_index=True
             )

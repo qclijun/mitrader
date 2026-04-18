@@ -128,13 +128,36 @@ def build_candlestick_chart(
     return fig
 
 
-def get_trade_table_data(trade_df: pl.DataFrame) -> list:
-    """Convert trade DataFrame to list of dicts for table display.
+def get_trade_table_data(trade_df: pl.DataFrame) -> pl.DataFrame:
+    """Convert trade DataFrame to styled DataFrame for table display.
 
     Args:
         trade_df: Trade records for an asset
 
     Returns:
-        List of row dicts with formatted values
+        Polars DataFrame with formatted values
     """
-    return [format_trade_row(row) for row in trade_df.iter_rows(named=True)]
+    formatted_rows = [format_trade_row(row) for row in trade_df.iter_rows(named=True)]
+    return pl.DataFrame(formatted_rows)
+
+
+def style_trade_table(df: pl.DataFrame) -> object:
+    """Apply row coloring based on trade type.
+
+    Args:
+        df: Formatted trade DataFrame
+
+    Returns:
+        Pandas Styler with row background colors applied
+    """
+    pandas_df = df.to_pandas()
+
+    def highlight_rows(row):
+        # Green background for buy rows, red for sell rows
+        if row['类型'] == '买入':
+            return ['background-color: #e6ffe6'] * len(row)
+        elif row['类型'] == '卖出':
+            return ['background-color: #ffe6e6'] * len(row)
+        return [''] * len(row)
+
+    return pandas_df.style.apply(highlight_rows, axis=1)
