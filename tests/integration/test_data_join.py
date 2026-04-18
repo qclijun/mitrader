@@ -46,10 +46,8 @@ class TestGetAssetList:
 
         assert result['asset_id'].n_unique() == result.height
 
-    def test_get_asset_list_multiple_names_concat(self, minimal_trade_df, multiple_names_price_df):
-        """Same bond_id with multiple bond_nm values are concatenated with ','."""
-        # minimal_trade_df has asset '111001'; multiple_names_price_df has bond_id '999001'
-        # Use a trade df that references the multi-name bond
+    def test_get_asset_list_multiple_names_concat(self):
+        """Non-letter-prefixed bond_nm values are joined with ','."""
         trade_df = create_trade_with_single_asset('999001')
         price_df = create_prices_with_multiple_names('999001', ['债券甲', '债券乙'])
 
@@ -61,6 +59,21 @@ class TestGetAssetList:
         assert '债券甲' in nm
         assert '债券乙' in nm
         assert ',' in nm
+
+    def test_get_asset_list_filters_letter_prefixed_names(self):
+        """bond_nm values starting with an English letter (Z, XD, N…) are excluded."""
+        trade_df = create_trade_with_single_asset('888001')
+        # Mix: one Chinese name + two letter-prefixed names
+        price_df = create_prices_with_multiple_names('888001', ['正常债券', 'Z888001', 'XD888001'])
+
+        result = get_asset_list(trade_df, price_df)
+
+        row = result.filter(pl.col('asset_id') == '888001')
+        assert row.height == 1
+        nm = row['asset_nm'][0]
+        assert '正常债券' in nm
+        assert 'Z888001' not in nm
+        assert 'XD888001' not in nm
 
     def test_get_asset_list_no_matching_prices(self):
         """Asset in trades with no matching bond_id in prices has null asset_nm."""

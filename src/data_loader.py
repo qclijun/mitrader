@@ -77,10 +77,14 @@ def get_asset_list(trade_df: pl.DataFrame, price_df: pl.DataFrame) -> pl.DataFra
     Returns:
         DataFrame with columns: asset_id, asset_nm, trade_count, total_pnlcomm
     """
-    # Get bond_nm from price data — concatenate multiple names for same bond_id
+    # Get bond_nm from price data.
+    # Filter out names that start with an English letter (e.g. "Z", "XD", "N" prefixes
+    # used for new issues / ex-dividend / new listings), then concatenate the remaining
+    # names per bond_id with ','.
     asset_names = (
         price_df.select(['bond_id', 'bond_nm'])
         .unique()
+        .filter(~pl.col('bond_nm').str.contains(r'^[A-Za-z]'))
         .group_by('bond_id')
         .agg(pl.col('bond_nm').sort().str.join(','))
     )
