@@ -63,9 +63,17 @@ def format_trade_row(row: dict) -> dict:
     else:
         return_pct = "-"
 
+    # Trade type indicator: colored dot emoji
+    if row['size'] > 0:
+        type_indicator = "🟢 买入"
+    elif row['size'] < 0:
+        type_indicator = "🔴 卖出"
+    else:
+        type_indicator = "未知"
+
     return {
         '日期': str(row['date']),
-        '类型': get_trade_type(row['size']),
+        '类型': type_indicator,
         '价格': f"{row['price']:.2f}",
         '仓位': abs(row['size']),
         '手续费': f"{row['comm']:.2f}",
