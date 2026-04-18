@@ -5,7 +5,7 @@ Streamlit application for visualizing trade records on K-line charts.
 """
 import streamlit as st
 import polars as pl
-from datetime import date
+from datetime import date, timedelta
 
 from src.data_loader import (
     load_trade_data,
@@ -117,22 +117,28 @@ def main():
 
         if selected_asset and st.session_state.trade_df is not None:
             asset_trades = get_asset_trades(st.session_state.trade_df, selected_asset)
+            asset_prices = get_asset_prices(st.session_state.price_df, selected_asset)
 
-            min_date = asset_trades['date'].min()
-            max_date = asset_trades['date'].max()
+            first_trade = asset_trades['date'].min()
+            last_trade = asset_trades['date'].max()
+            price_min = asset_prices['trade_date'].min()
+            price_max = asset_prices['trade_date'].max()
+
+            default_start = max(first_trade - timedelta(days=30), price_min)
+            default_end = min(last_trade + timedelta(days=30), price_max)
 
             start_date = st.date_input(
                 '起始日期',
-                value=min_date,
-                min_value=min_date,
-                max_value=max_date
+                value=default_start,
+                min_value=price_min,
+                max_value=price_max
             )
 
             end_date = st.date_input(
                 '结束日期',
-                value=max_date,
-                min_value=min_date,
-                max_value=max_date
+                value=default_end,
+                min_value=price_min,
+                max_value=price_max
             )
 
             date_range = (start_date, end_date)
