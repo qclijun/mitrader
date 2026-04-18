@@ -1,0 +1,16 @@
+{
+  "app.py": 1776465971.8795755,
+  "src/utils.py": 1776468086.0650225,
+  "src/data_loader.py": 1776472525.0575705,
+  "src/chart_builder.py": 1776468162.147799,
+  "src/__init__.py": 1776468182.6971705,
+  "tests/__init__.py": 1776471690.2711964,
+  "tests/e2e/__init__.py": 1776471690.292684,
+  "CLAUDE.md": 1776438096.8651857,
+  "README.md": 1776470316.5408785,
+  "docs/superpowers/specs/2026-04-17-kline-visualization-design.md": 1776439250.3380244,
+  "docs/superpowers/specs/2026-04-18-type-mismatch-fix-design.md": 1776471311.7026265,
+  "docs/superpowers/plans/2026-04-18-type-mismatch-fix.md": 1776471558.1066508,
+  "docs/superpowers/plans/2026-04-17-kline-visualization.md": 1776440962.3840785,
+  "tmp/ScreenShot_2026-04-18_075613_152.png": 1776470188.6830719
+}

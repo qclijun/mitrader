@@ -1,0 +1,7 @@
+CLAUDE.md
+README.md
+docs/superpowers/specs/2026-04-17-kline-visualization-design.md
+docs/superpowers/specs/2026-04-18-type-mismatch-fix-design.md
+docs/superpowers/plans/2026-04-18-type-mismatch-fix.md
+docs/superpowers/plans/2026-04-17-kline-visualization.md
+tmp/ScreenShot_2026-04-18_075613_152.png
