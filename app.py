@@ -37,6 +37,8 @@ def main():
         st.session_state.price_df = None
     if 'asset_list' not in st.session_state:
         st.session_state.asset_list = None
+    if 'selected_asset_id' not in st.session_state:
+        st.session_state.selected_asset_id = None
 
     # Sidebar: Data loading
     with st.sidebar:
@@ -82,12 +84,14 @@ def main():
 
             filtered_list = filter_assets(st.session_state.asset_list, search_term)
 
-            # Display asset list as dataframe
+            # Display asset list as dataframe (row click updates selectbox)
             if len(filtered_list) > 0:
-                st.dataframe(
+                event = st.dataframe(
                     filtered_list,
                     use_container_width=True,
                     hide_index=True,
+                    on_select='rerun',
+                    selection_mode='single-row',
                     column_config={
                         'asset_id': st.column_config.TextColumn('资产ID'),
                         'asset_nm': st.column_config.TextColumn('资产名称'),
@@ -96,13 +100,25 @@ def main():
                     }
                 )
 
-                # Asset selection
+                # Row click → update session state
+                if event.selection.rows:
+                    clicked_id = filtered_list['asset_id'][event.selection.rows[0]]
+                    st.session_state.selected_asset_id = clicked_id
+
+                # Sync selectbox default with session state
                 asset_ids = filtered_list['asset_id'].to_list()
+                default_idx = 0
+                if st.session_state.selected_asset_id in asset_ids:
+                    default_idx = asset_ids.index(st.session_state.selected_asset_id)
+
                 selected_asset = st.selectbox(
                     '选择资产',
                     options=asset_ids,
-                    help='选择要查看的资产'
+                    index=default_idx,
+                    help='选择要查看的资产；也可单击上方列表中的行'
                 )
+                # Keep session state in sync with selectbox
+                st.session_state.selected_asset_id = selected_asset
             else:
                 st.warning('没有匹配的资产')
                 selected_asset = None
