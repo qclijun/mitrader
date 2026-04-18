@@ -22,11 +22,12 @@ def _make_price_df(n: int = 3) -> pl.DataFrame:
     }).with_columns(pl.col('trade_date').cast(pl.Date))
 
 
-def _make_trade_df(buys: int = 1, sells: int = 1) -> pl.DataFrame:
+def _make_trade_df(buys: int = 1, sells: int = 1, partial_sell: bool = False) -> pl.DataFrame:
     if buys == 0 and sells == 0:
         return pl.DataFrame({
             'date': pl.Series([], dtype=pl.Date),
             'size': pl.Series([], dtype=pl.Int64),
+            'curr_size': pl.Series([], dtype=pl.Int64),
             'price': pl.Series([], dtype=pl.Float64),
             'comm': pl.Series([], dtype=pl.Float64),
             'pnl': pl.Series([], dtype=pl.Float64),
@@ -37,15 +38,18 @@ def _make_trade_df(buys: int = 1, sells: int = 1) -> pl.DataFrame:
         rows.append({
             'date': date(2026, 4, 1 + i),
             'size': 100,
+            'curr_size': 100,
             'price': 100.0,
             'comm': 0.5,
             'pnl': 0.0,
             'pnlcomm': 0.0,
         })
     for i in range(sells):
+        # partial_sell=True → curr_size stays > 0 (didn't fully close)
         rows.append({
             'date': date(2026, 4, 2 + buys + i),
             'size': -100,
+            'curr_size': 50 if partial_sell else 0,
             'price': 102.0,
             'comm': 0.5,
             'pnl': 2.0,
@@ -93,6 +97,31 @@ class TestBuildCandlestickChart:
         assert 'K线' in trace_names
         assert '买入点' in trace_names
         assert '卖出点' in trace_names
+
+    def test_buy_marker_text_includes_quantity(self):
+        """Buy marker text includes the position quantity."""
+        fig = build_candlestick_chart(_make_price_df(5), _make_trade_df(1, 0), '资产A')
+
+        buy_trace = next(t for t in fig.data if t.name == '买入点')
+        assert '100' in buy_trace.text[0]
+
+    def test_full_close_sell_shows_return_percentage(self):
+        """Full-close sell (curr_size==0) annotation includes return rate with '%'."""
+        fig = build_candlestick_chart(_make_price_df(5), _make_trade_df(1, 1, partial_sell=False), '资产A')
+
+        sell_trace = next(t for t in fig.data if t.name == '卖出点')
+        text = sell_trace.text[0]
+        assert '100' in text       # quantity
+        assert '%' in text         # return rate
+
+    def test_partial_sell_no_return_percentage(self):
+        """Partial sell (curr_size>0) annotation has quantity but no return rate '%'."""
+        fig = build_candlestick_chart(_make_price_df(5), _make_trade_df(1, 1, partial_sell=True), '资产A')
+
+        sell_trace = next(t for t in fig.data if t.name == '卖出点')
+        text = sell_trace.text[0]
+        assert '100' in text       # quantity
+        assert '%' not in text     # no return rate
 
 
 @pytest.mark.unit

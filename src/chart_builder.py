@@ -5,7 +5,7 @@ import polars as pl
 import plotly.graph_objects as go
 from typing import Optional
 
-from src.utils import get_trade_type, format_trade_row
+from src.utils import get_trade_type, format_trade_row, calculate_return_percentage
 
 
 def build_candlestick_chart(
@@ -52,7 +52,7 @@ def build_candlestick_chart(
     buy_trades = trade_df.filter(pl.col('size') > 0)
     sell_trades = trade_df.filter(pl.col('size') < 0)
 
-    # Add buy markers (green up arrow)
+    # Add buy markers (green up arrow) with quantity
     if len(buy_trades) > 0:
         fig.add_trace(go.Scatter(
             x=buy_trades['date'].to_list(),
@@ -64,24 +64,27 @@ def build_candlestick_chart(
                 color='green',
                 line=dict(color='darkgreen', width=1)
             ),
-            text=[get_trade_type(row['size']) for row in buy_trades.iter_rows(named=True)],
+            text=[f"买入\n{row['size']}" for row in buy_trades.iter_rows(named=True)],
             textposition='top center',
             name='买入点'
         ))
 
-    # Add sell markers (red down arrow) with return rate annotation
+    # Add sell markers (red down arrow) with quantity.
+    # Full-close sells (curr_size == 0) also show return rate percentage.
     if len(sell_trades) > 0:
         sell_rows_list = list(sell_trades.iter_rows(named=True))
         sell_dates = [row['date'] for row in sell_rows_list]
         sell_prices = [row['price'] for row in sell_rows_list]
-        trade_types = [get_trade_type(row['size']) for row in sell_rows_list]
-        pnlcomm_values = [row['pnlcomm'] for row in sell_rows_list]
 
-        # Format return rate text
-        return_texts = [
-            f"{t}\n{p:+.2f}" if p != 0 else t
-            for t, p in zip(trade_types, pnlcomm_values)
-        ]
+        def _sell_text(row: dict) -> str:
+            qty = abs(row['size'])
+            base = f"卖出\n{qty}"
+            if row['curr_size'] == 0:
+                pct = calculate_return_percentage(row['pnl'], row['pnlcomm'], row['price'], row['size'])
+                return f"{base}\n{pct}"
+            return base
+
+        return_texts = [_sell_text(row) for row in sell_rows_list]
 
         fig.add_trace(go.Scatter(
             x=sell_dates,

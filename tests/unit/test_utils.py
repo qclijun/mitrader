@@ -29,18 +29,24 @@ class TestGetTradeType:
 class TestCalculateReturnPercentage:
 
     def test_calculate_return_percentage_positive(self):
-        """Positive pnlcomm formats with leading '+'."""
-        result = calculate_return_percentage(3.0, 2.50)
-        assert result == '+2.50'
+        """Positive return: pnlcomm / (price×|size| - pnl) × 100 with '+' prefix."""
+        # cost_basis = 110.0 × 100 - (-5.0) = 11005.0, pct = 550.0 / 11005.0 * 100 ≈ +4.998%
+        result = calculate_return_percentage(-5.0, 550.0, 110.0, -100)
+        assert result.startswith('+')
+        assert result.endswith('%')
+        assert '+4.99' in result or '+5.00' in result
 
     def test_calculate_return_percentage_negative(self):
-        """Negative pnlcomm formats without explicit sign prefix."""
-        result = calculate_return_percentage(-2.0, -1.50)
-        assert result == '-1.50'
+        """Negative return: result starts with '-' and ends with '%'."""
+        # cost_basis = 137.99 × 120 - (-693.60) = 17252.4, pct = -700.36 / 17252.4 * 100 ≈ -4.06%
+        result = calculate_return_percentage(-693.60, -700.36, 137.99, -120)
+        assert result.startswith('-')
+        assert result.endswith('%')
+        assert '-4.0' in result
 
     def test_calculate_return_percentage_zero(self):
         """Zero pnlcomm returns '0.00%'."""
-        result = calculate_return_percentage(0.0, 0.0)
+        result = calculate_return_percentage(0.0, 0.0, 100.0, -100)
         assert result == '0.00%'
 
 

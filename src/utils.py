@@ -3,22 +3,30 @@ Utility functions for calculations and formatting.
 """
 
 
-def calculate_return_percentage(pnl: float, pnlcomm: float) -> str:
-    """Calculate and format return percentage.
+def calculate_return_percentage(pnl: float, pnlcomm: float, price: float, size: int) -> str:
+    """Calculate and format return rate percentage for a sell trade.
+
+    Uses the formula: cost_basis = price × |size| - pnl
+    return_pct = pnlcomm / cost_basis × 100
 
     Args:
-        pnl: Gross profit/loss
-        pnlcomm: Net profit/loss after commission
+        pnl: Gross profit/loss (yuan)
+        pnlcomm: Net profit/loss after commission (yuan)
+        price: Sell price
+        size: Position size (negative for sell)
 
     Returns:
-        Formatted string showing percentage
+        Formatted string like '+1.23%' or '-4.06%'
     """
     if pnlcomm == 0:
         return "0.00%"
 
-    percentage = pnlcomm
-    sign = "+" if percentage > 0 else ""
-    return f"{sign}{percentage:.2f}"
+    cost_basis = price * abs(size) - pnl
+    if cost_basis == 0:
+        return "0.00%"
+
+    pct = pnlcomm / cost_basis * 100
+    return f"{pct:+.2f}%"
 
 
 def get_trade_type(size: int) -> str:
