@@ -83,6 +83,7 @@ def get_asset_list(trade_df: pl.DataFrame, price_df: pl.DataFrame) -> pl.DataFra
     # names per bond_id with ','.
     asset_names = (
         price_df.select(['bond_id', 'bond_nm'])
+        .with_columns(pl.col('bond_nm').str.replace_all(r'\s+', ''))
         .unique()
         .filter(~pl.col('bond_nm').str.contains(r'^[A-Za-z]'))
         .group_by('bond_id')

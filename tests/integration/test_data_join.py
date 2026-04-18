@@ -60,6 +60,20 @@ class TestGetAssetList:
         assert '债券乙' in nm
         assert ',' in nm
 
+    def test_get_asset_list_strips_whitespace_from_names(self):
+        """Whitespace inside bond_nm is removed before processing."""
+        trade_df = create_trade_with_single_asset('777001')
+        price_df = create_prices_with_multiple_names('777001', ['债 券 A', ' 债券B '])
+
+        result = get_asset_list(trade_df, price_df)
+
+        row = result.filter(pl.col('asset_id') == '777001')
+        assert row.height == 1
+        nm = row['asset_nm'][0]
+        assert ' ' not in nm          # no spaces remain
+        assert '债券A' in nm
+        assert '债券B' in nm
+
     def test_get_asset_list_filters_letter_prefixed_names(self):
         """bond_nm values starting with an English letter (Z, XD, N…) are excluded."""
         trade_df = create_trade_with_single_asset('888001')
