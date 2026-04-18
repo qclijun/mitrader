@@ -77,8 +77,13 @@ def get_asset_list(trade_df: pl.DataFrame, price_df: pl.DataFrame) -> pl.DataFra
     Returns:
         DataFrame with columns: asset_id, asset_nm, trade_count, total_pnlcomm
     """
-    # Get bond_nm from price data
-    asset_names = price_df.select(['bond_id', 'bond_nm']).unique()
+    # Get bond_nm from price data — concatenate multiple names for same bond_id
+    asset_names = (
+        price_df.select(['bond_id', 'bond_nm'])
+        .unique()
+        .group_by('bond_id')
+        .agg(pl.col('bond_nm').sort().str.join(','))
+    )
 
     # Aggregate trade stats per asset
     trade_stats = trade_df.group_by('asset').agg([

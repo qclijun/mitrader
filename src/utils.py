@@ -30,7 +30,12 @@ def get_trade_type(size: int) -> str:
     Returns:
         '买入' or '卖出'
     """
-    return "买入" if size > 0 else "卖出"
+    if size > 0:
+        return "买入"
+    elif size < 0:
+        return "卖出"
+    else:
+        return "未知"
 
 
 def format_trade_row(row: dict) -> dict:

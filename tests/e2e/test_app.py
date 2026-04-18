@@ -1,43 +1,127 @@
 """
-E2E tests for mitrader application.
+E2E tests for mitrader application (6 tests).
 
-These tests verify the UI behavior after the type mismatch fix.
-Run manually or via Playwright MCP tools.
+Requires: playwright installed (`uv add playwright && uv run playwright install chromium`)
+Auto-skips gracefully when playwright is not available.
 """
+from pathlib import Path
+
 import pytest
+
+try:
+    import playwright  # noqa: F401
+except ImportError:
+    pytest.skip('playwright not installed', allow_module_level=True)
+
+TRADE_PATH = str(Path(__file__).parent.parent.parent / 'sample_data' / 'trade.csv')
+PRICES_PATH = str(Path(__file__).parent.parent.parent / 'sample_data' / 'prices.parquet')
+
+
+def _load_data(page):
+    """Fill file paths and click '加载数据', wait for success alert AND chart render."""
+    inputs = page.locator('[data-testid="stTextInput"] input').all()
+    inputs[0].fill(TRADE_PATH)
+    inputs[1].fill(PRICES_PATH)
+    page.get_by_role('button', name='加载数据').click()
+    # Success alert: data-testid="stAlertContentSuccess"
+    page.wait_for_selector('[data-testid="stAlertContentSuccess"]', timeout=20_000)
+    # Streamlit rerenders once more to select the first asset and render the chart
+    page.wait_for_selector('[data-testid="stPlotlyChart"]', timeout=15_000)
 
 
 @pytest.mark.e2e
 class TestMitraderUI:
-    """Tests for mitrader UI behavior."""
 
-    def test_app_loads(self, streamlit_server):
-        """Verify the app page loads without errors."""
-        # This test is a placeholder for manual verification
-        # Use Playwright MCP tools:
-        # 1. mcp_playwright_browser_navigate(url=streamlit_server)
-        # 2. mcp_playwright_browser_snapshot() to verify page
-        # 3. Check that title contains "mitrader" or "交易"
-        pytest.skip("Manual E2E test - use Playwright MCP tools")
+    def test_e2e_load_data_success(self, browser_page):
+        """Valid file paths → '数据加载成功' alert + asset count appear."""
+        _load_data(browser_page)
 
-    def test_load_data_no_console_error(self, streamlit_server):
-        """Verify loading data produces no JavaScript console errors."""
-        # This test is a placeholder for manual verification
-        # Use Playwright MCP tools:
-        # 1. Navigate to streamlit_server
-        # 2. Fill inputs: sample_data/trade.csv, sample_data/prices.parquet
-        # 3. Click "加载数据" button
-        # 4. Wait for "数据加载成功"
-        # 5. Check console messages for errors (mcp_playwright_browser_console_messages)
-        # 6. Verify no "undefined" or "trade_date" errors
-        pytest.skip("Manual E2E test - use Playwright MCP tools")
+        alert = browser_page.locator('[data-testid="stAlertContentSuccess"]')
+        assert alert.is_visible()
+        assert '数据加载成功' in alert.inner_text()
+        assert '个资产' in alert.inner_text()
 
-    def test_select_asset_shows_chart(self, streamlit_server):
-        """Verify selecting an asset displays the K-line chart."""
-        # This test is a placeholder for manual verification
-        # Use Playwright MCP tools:
-        # 1. Navigate and load data (as above)
-        # 2. Select asset from dropdown
-        # 3. Wait for "K线图" to appear
-        # 4. Verify chart is rendered
-        pytest.skip("Manual E2E test - use Playwright MCP tools")
+    def test_e2e_load_data_invalid_path(self, browser_page):
+        """Invalid trade path → error alert with FileNotFoundError message."""
+        inputs = browser_page.locator('[data-testid="stTextInput"] input').all()
+        inputs[0].fill('/nonexistent/trade.csv')
+        inputs[1].fill(PRICES_PATH)
+        browser_page.get_by_role('button', name='加载数据').click()
+
+        browser_page.wait_for_selector('[data-testid="stAlertContentError"]', timeout=10_000)
+        error = browser_page.locator('[data-testid="stAlertContentError"]')
+        assert error.is_visible()
+        assert 'not found' in error.inner_text().lower()
+
+    def test_e2e_search_and_select_asset(self, browser_page):
+        """Load → type in search → asset list narrows → chart remains visible."""
+        _load_data(browser_page)
+
+        # After load the first asset is auto-selected and chart is rendered
+        assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()
+
+        # Type partial ID in search box (placeholder='输入资产ID或名称')
+        search = browser_page.locator('input[placeholder="输入资产ID或名称"]')
+        assert search.is_visible()
+        first_id = browser_page.locator('[data-testid="stSelectbox"]').first.inner_text().strip()
+        partial = first_id[:3] if len(first_id) >= 3 else first_id
+
+        search.fill(partial)
+        browser_page.wait_for_timeout(1_000)  # wait for Streamlit to re-render
+
+        # Selectbox and chart should still be present
+        assert browser_page.locator('[data-testid="stSelectbox"]').is_visible()
+        assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()
+
+    def test_e2e_chart_render_with_markers(self, browser_page):
+        """After load the chart contains K-line and trade markers."""
+        _load_data(browser_page)
+
+        chart = browser_page.locator('[data-testid="stPlotlyChart"]')
+        assert chart.is_visible()
+
+        # Verify Plotly rendered an actual SVG/canvas inside the chart
+        chart_inner = chart.locator('.js-plotly-plot, svg')
+        assert chart_inner.count() > 0
+
+        # Page should mention at least one of the trace legend names
+        page_text = browser_page.inner_text('body')
+        assert '买入点' in page_text or '卖出点' in page_text or 'K线' in page_text
+
+    def test_e2e_trade_details_expander(self, browser_page):
+        """Expand '交易详情' → trade table rows appear."""
+        _load_data(browser_page)
+
+        # Expander is collapsed by default; click to expand
+        expander = browser_page.locator('[data-testid="stExpander"]').first
+        assert expander.is_visible()
+        expander.click()
+
+        # Trade data table appears inside expander details
+        details = browser_page.locator('[data-testid="stExpanderDetails"]').first
+        assert details.is_visible()
+
+        # At least one dataframe (trade detail table) must be inside
+        inner_df = details.locator('[data-testid="stDataFrame"]')
+        assert inner_df.count() > 0
+
+    def test_e2e_date_range_filter(self, browser_page):
+        """Change start/end date → chart x-axis re-renders."""
+        _load_data(browser_page)
+
+        # Chart visible before filter
+        assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()
+
+        # Date inputs appear after an asset is auto-selected (Streamlit renders them with YYYY/MM/DD placeholder)
+        date_inputs = browser_page.locator('input[placeholder="YYYY/MM/DD"]')
+        assert date_inputs.count() >= 2
+
+        # Change start date to a later date to narrow the range
+        start_input = date_inputs.nth(0)
+        start_input.click(click_count=3)  # select all text
+        start_input.type('2025/01/01')
+        start_input.press('Enter')
+        browser_page.wait_for_timeout(2_000)
+
+        # Chart must still be rendered after date change
+        assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()

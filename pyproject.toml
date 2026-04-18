@@ -9,3 +9,9 @@ dependencies = [
     "polars>=1.39.3",
     "streamlit>=1.56.0",
 ]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.58.0",
+    "pytest>=9.0.3",
+]
