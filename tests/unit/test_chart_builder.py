@@ -128,19 +128,20 @@ class TestBuildCandlestickChart:
 class TestGetTradeTableData:
 
     def test_get_trade_table_data_basic(self):
-        """DataFrame converts to list of dicts with display column names."""
+        """DataFrame converts to a formatted table DataFrame with display column names."""
         trade_df = _make_trade_df(1, 1)
         result = get_trade_table_data(trade_df)
 
-        assert isinstance(result, list)
-        assert len(result) == 2
-        assert '日期' in result[0]
-        assert '类型' in result[0]
-        assert '价格' in result[0]
+        assert isinstance(result, pl.DataFrame)
+        assert result.height == 2
+        assert '日期' in result.columns
+        assert '类型' in result.columns
+        assert '价格' in result.columns
 
     def test_get_trade_table_data_empty(self):
-        """Empty DataFrame returns empty list."""
+        """Empty DataFrame returns an empty formatted DataFrame."""
         empty = _make_trade_df(0, 0)
         result = get_trade_table_data(empty)
 
-        assert result == []
+        assert isinstance(result, pl.DataFrame)
+        assert result.is_empty()

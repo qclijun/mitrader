@@ -66,7 +66,7 @@ class TestFormatTradeRow:
         result = format_trade_row(row)
 
         assert result['日期'] == '2026-04-01'
-        assert result['类型'] == '买入'
+        assert result['类型'] == '🟢 买入'
         assert result['价格'] == '100.50'
         assert result['仓位'] == 100
         assert result['手续费'] == '0.50'

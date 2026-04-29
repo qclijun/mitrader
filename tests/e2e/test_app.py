@@ -4,6 +4,7 @@ E2E tests for mitrader application (6 tests).
 Requires: playwright installed (`uv add playwright && uv run playwright install chromium`)
 Auto-skips gracefully when playwright is not available.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ except ImportError:
 
 TRADE_PATH = str(Path(__file__).parent.parent.parent / 'sample_data' / 'trade.csv')
 PRICES_PATH = str(Path(__file__).parent.parent.parent / 'sample_data' / 'prices.parquet')
+PNL_PATH = str(Path(__file__).parent.parent.parent / 'sample_data' / 'pnl.csv')
 
 
 def _load_data(page):
@@ -63,14 +65,15 @@ class TestMitraderUI:
         # Type partial ID in search box (placeholder='输入资产ID或名称')
         search = browser_page.locator('input[placeholder="输入资产ID或名称"]')
         assert search.is_visible()
-        first_id = browser_page.locator('[data-testid="stSelectbox"]').first.inner_text().strip()
+        selected_caption = browser_page.get_by_text(re.compile('当前选中：')).inner_text()
+        first_id = selected_caption.split('当前选中：', 1)[1].strip()
         partial = first_id[:3] if len(first_id) >= 3 else first_id
 
         search.fill(partial)
         browser_page.wait_for_timeout(1_000)  # wait for Streamlit to re-render
 
-        # Selectbox and chart should still be present
-        assert browser_page.locator('[data-testid="stSelectbox"]').is_visible()
+        # Asset table and chart should still be present
+        assert browser_page.locator('[data-testid="stDataFrame"]').first.is_visible()
         assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()
 
     def test_e2e_chart_render_with_markers(self, browser_page):
@@ -125,3 +128,30 @@ class TestMitraderUI:
 
         # Chart must still be rendered after date change
         assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()
+
+
+@pytest.mark.e2e
+class TestStrategyRiskReturnUI:
+
+    def test_e2e_strategy_page_loads_pnl_and_renders_outputs(self, browser_page):
+        """New multipage page loads pnl.csv and renders chart plus tables."""
+        browser_page.get_by_role('link', name=re.compile('strategy.*risk.*return', re.I)).click()
+        browser_page.wait_for_selector('text=策略风险收益评估及对比', timeout=10_000)
+
+        inputs = browser_page.locator('[data-testid="stTextInput"] input').all()
+        inputs[0].fill(PNL_PATH)
+        browser_page.get_by_role('button', name='加载收益数据').click()
+
+        browser_page.wait_for_selector('[data-testid="stAlertContentSuccess"]', timeout=20_000)
+        assert '数据加载成功' in browser_page.locator('[data-testid="stAlertContentSuccess"]').inner_text()
+
+        browser_page.wait_for_selector('[data-testid="stPlotlyChart"]', timeout=20_000)
+        assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()
+        browser_page.wait_for_selector('[data-testid="stTable"]', timeout=20_000)
+        assert browser_page.locator('[data-testid="stTable"]').count() >= 2
+
+        page_text = browser_page.inner_text('body')
+        assert '最近收益情况' in page_text
+        assert '风险收益评估' in page_text
+        assert '最新累计净值' in page_text
+        assert '年化收益率' in page_text
