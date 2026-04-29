@@ -2,6 +2,7 @@
 Unit tests for strategy risk/return page table formatting.
 """
 from importlib import util
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -21,7 +22,59 @@ def _load_strategy_page_module():
 
 
 @pytest.mark.unit
+class TestStrategyTablePreparation:
+
+    def test_recent_returns_use_full_loaded_data_while_metrics_use_analysis_range(self):
+        page = _load_strategy_page_module()
+        full_df = pl.DataFrame({
+            'datetime': [
+                date(2024, 1, 2),
+                date(2024, 12, 30),
+                date(2024, 12, 31),
+            ],
+            'strategy': [0.10, 0.20, -0.10],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+        analysis_df = full_df.filter(pl.col('datetime') == date(2024, 1, 2))
+
+        recent_returns, metrics = page.prepare_strategy_tables(
+            full_df,
+            analysis_df,
+            ['strategy'],
+            benchmark=None,
+        )
+
+        recent_row = recent_returns.row(0, named=True)
+        metrics_row = metrics.row(0, named=True)
+        assert recent_row['latest_nav'] == pytest.approx(1.10 * 1.20 * 0.90)
+        assert recent_row['wtd_return'] == pytest.approx((1.20 * 0.90) - 1)
+        assert metrics_row['annualized_return'] == pytest.approx((1.10 ** 252) - 1)
+
+
+@pytest.mark.unit
 class TestMetricsHighlighting:
+
+    def test_recent_returns_formatting_uses_percentages_and_dash_for_undefined_values(self):
+        page = _load_strategy_page_module()
+        recent_returns = pl.DataFrame({
+            'series': ['strategy'],
+            'latest_nav': [1.23456],
+            'wtd_return': [0.01234],
+            'mtd_return': [None],
+            'ytd_return': [-0.05678],
+            'year_max_drawdown': [-0.12346],
+            'current_drawdown': [None],
+        })
+
+        formatted = page._format_recent_returns(recent_returns)
+        row = formatted.iloc[0]
+
+        assert row['收益序列'] == 'strategy'
+        assert row['最新累计净值'] == pytest.approx(1.2346)
+        assert row['WTD(%)'] == pytest.approx(1.23)
+        assert row['MTD(%)'] == '-'
+        assert row['YTD(%)'] == pytest.approx(-5.68)
+        assert row['本年最大回撤(%)'] == pytest.approx(-12.35)
+        assert row['本年当前回撤(%)'] == '-'
 
     def test_metric_formatting_uses_percentages_and_dash_for_undefined_values(self):
         page = _load_strategy_page_module()

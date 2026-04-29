@@ -124,14 +124,30 @@ def main():
     fig = build_nav_drawdown_chart(nav_drawdown_df, selected_series)
     st.plotly_chart(fig, use_container_width=True)
 
-    recent_returns = calculate_recent_returns(pnl_df, selected_series)
-    metrics = calculate_metrics_table(filtered_df, selected_series, benchmark=benchmark)
+    recent_returns, metrics = prepare_strategy_tables(
+        pnl_df,
+        filtered_df,
+        selected_series,
+        benchmark=benchmark,
+    )
 
     st.subheader('最近收益情况')
     st.table(_format_recent_returns(recent_returns))
 
     st.subheader('风险收益评估')
     st.table(_format_metrics(metrics).style.apply(_highlight_best_metrics, axis=None))
+
+
+def prepare_strategy_tables(
+    loaded_df: pl.DataFrame,
+    analysis_df: pl.DataFrame,
+    selected_series: list[str],
+    benchmark: Optional[str] = None,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Calculate page tables from their intended date scopes."""
+    recent_returns = calculate_recent_returns(loaded_df, selected_series)
+    metrics = calculate_metrics_table(analysis_df, selected_series, benchmark=benchmark)
+    return recent_returns, metrics
 
 
 def _format_recent_returns(df: pl.DataFrame) -> pd.DataFrame:

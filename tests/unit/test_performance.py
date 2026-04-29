@@ -155,6 +155,25 @@ class TestRecentReturns:
         assert row['current_drawdown'] <= 0.0
         assert row['year_max_drawdown'] <= 0.0
 
+    def test_recent_returns_periods_use_latest_data_date_calendar_boundaries(self):
+        df = pl.DataFrame({
+            'datetime': [
+                date(2023, 12, 29),
+                date(2024, 1, 1),
+                date(2024, 12, 1),
+                date(2024, 12, 30),
+                date(2024, 12, 31),
+            ],
+            'strategy': [0.50, 0.10, 0.20, 0.03, -0.02],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+
+        result = calculate_recent_returns(df, ['strategy'])
+        row = result.row(0, named=True)
+
+        assert row['wtd_return'] == pytest.approx((1.03 * 0.98) - 1)
+        assert row['mtd_return'] == pytest.approx((1.20 * 1.03 * 0.98) - 1)
+        assert row['ytd_return'] == pytest.approx((1.10 * 1.20 * 1.03 * 0.98) - 1)
+
     def test_recent_returns_current_drawdown_uses_current_year(self):
         df = pl.DataFrame({
             'datetime': [
