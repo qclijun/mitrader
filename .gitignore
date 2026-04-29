@@ -143,5 +143,8 @@ sample_data/
 # temp directory
 tmp/
 
+# Generated code graph artifacts
+graphify-out/
+
 # Claude Code local settings
 .claude/settings.local.json
