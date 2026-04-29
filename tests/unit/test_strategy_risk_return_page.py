@@ -1,8 +1,10 @@
 """
 Unit tests for strategy risk/return page table formatting.
 """
-from importlib import util
+import py_compile
+import tomllib
 from datetime import date
+from importlib import util
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +21,20 @@ def _load_strategy_page_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.unit
+class TestStrategyPageCompatibility:
+
+    def test_strategy_page_compiles(self):
+        py_compile.compile(PAGE_PATH, doraise=True)
+
+    def test_pandas_is_direct_project_dependency(self):
+        pyproject_path = PAGE_PATH.parents[1] / 'pyproject.toml'
+        pyproject = tomllib.loads(pyproject_path.read_text())
+
+        dependencies = pyproject['project']['dependencies']
+        assert any(dependency.startswith('pandas') for dependency in dependencies)
 
 
 @pytest.mark.unit

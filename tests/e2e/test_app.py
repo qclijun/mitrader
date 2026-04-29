@@ -1,5 +1,5 @@
 """
-E2E tests for mitrader application (6 tests).
+E2E tests for mitrader application.
 
 Requires: playwright installed (`uv add playwright && uv run playwright install chromium`)
 Auto-skips gracefully when playwright is not available.
@@ -158,12 +158,16 @@ class TestStrategyRiskReturnUI:
         assert '数据加载成功' in browser_page.locator('[data-testid="stAlertContentSuccess"]').inner_text()
 
         browser_page.wait_for_selector('[data-testid="stPlotlyChart"]', timeout=20_000)
-        assert browser_page.locator('[data-testid="stPlotlyChart"]').is_visible()
+        chart = browser_page.locator('[data-testid="stPlotlyChart"]')
+        assert chart.is_visible()
+        assert chart.locator('.js-plotly-plot, svg').count() > 0
         browser_page.wait_for_selector('[data-testid="stTable"]', timeout=20_000)
         assert browser_page.locator('[data-testid="stTable"]').count() >= 2
 
         page_text = browser_page.inner_text('body')
         assert '最近收益情况' in page_text
         assert '风险收益评估' in page_text
+        assert '净值' in page_text
+        assert '回撤' in page_text
         assert '最新累计净值' in page_text
         assert '年化收益率' in page_text
