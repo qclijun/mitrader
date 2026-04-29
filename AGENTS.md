@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`app.py` is the Streamlit entry point for the trading analysis UI. Core logic lives in `src/`: `data_loader.py` handles trade and price data loading, `chart_builder.py` builds Plotly K-line charts and markers, and `utils.py` contains shared helpers. Tests are organized under `tests/unit`, `tests/integration`, and `tests/e2e`, with common fixtures in `tests/fixtures` and `tests/conftest.py`. Example input files live in `sample_data/`. Planning and design notes are kept under `docs/superpowers/`. `graphify-out/` contains generated codebase graph artifacts.
+`app.py` is the Streamlit entry point for the trading analysis UI. Core logic lives in `src/`: `data_loader.py` handles trade and price data loading, `chart_builder.py` builds Plotly K-line charts and markers, and `utils.py` contains shared helpers. Tests are organized under `tests/unit`, `tests/integration`, and `tests/e2e`, with common fixtures in `tests/fixtures` and `tests/conftest.py`. Example input files live in `sample_data/`. Planning and design notes are kept under `docs/superpowers/`.
 
 ## Build, Test, and Development Commands
 
@@ -38,7 +38,3 @@ Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`
 ### Domain docs
 
 This is a single-context repo using root `CONTEXT.md` and `docs/adr/` when present. See `docs/agents/domain.md`.
-
-## Agent-Specific Instructions
-
-Before answering architecture or codebase questions, inspect `graphify-out/GRAPH_REPORT.md` when present. After modifying code files, run `graphify update .` to refresh the generated graph. Do not commit generated `graphify-out/cache` churn unless the task explicitly includes graph maintenance.
