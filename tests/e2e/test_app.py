@@ -133,6 +133,18 @@ class TestMitraderUI:
 @pytest.mark.e2e
 class TestStrategyRiskReturnUI:
 
+    def test_e2e_strategy_page_stays_empty_before_loading_pnl(self, browser_page):
+        """Opening the page shows the default sample path but does not load outputs yet."""
+        browser_page.get_by_role('link', name=re.compile('strategy.*risk.*return', re.I)).click()
+        browser_page.wait_for_selector('text=策略风险收益评估及对比', timeout=10_000)
+
+        pnl_input = browser_page.locator('[data-testid="stTextInput"] input').first
+        assert pnl_input.input_value().endswith('sample_data/pnl.csv')
+        assert browser_page.get_by_text('请在左侧加载 pnl.csv 数据').is_visible()
+        assert browser_page.locator('[data-testid="stPlotlyChart"]').count() == 0
+        assert browser_page.locator('[data-testid="stTable"]').count() == 0
+        assert browser_page.locator('[data-testid="stAlertContentSuccess"]').count() == 0
+
     def test_e2e_strategy_page_loads_pnl_and_renders_outputs(self, browser_page):
         """New multipage page loads pnl.csv and renders chart plus tables."""
         browser_page.get_by_role('link', name=re.compile('strategy.*risk.*return', re.I)).click()
