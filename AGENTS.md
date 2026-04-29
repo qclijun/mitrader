@@ -25,6 +25,20 @@ Pytest is the test runner. `pytest.ini` defines test discovery and the `unit`, `
 
 Recent history uses Conventional Commit-style prefixes such as `feat:`, `fix:`, and `refactor:`. Keep commits focused and imperative, for example `fix: strip whitespace from bond names`. Pull requests should describe the user-facing change, mention affected data formats or sample files, link related issues when available, and include screenshots or short recordings for UI changes. Note the test command run before review.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo using root `CONTEXT.md` and `docs/adr/` when present. See `docs/agents/domain.md`.
+
 ## Agent-Specific Instructions
 
 Before answering architecture or codebase questions, inspect `graphify-out/GRAPH_REPORT.md` when present. After modifying code files, run `graphify update .` to refresh the generated graph. Do not commit generated `graphify-out/cache` churn unless the task explicitly includes graph maintenance.
