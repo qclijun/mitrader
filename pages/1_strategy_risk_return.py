@@ -189,16 +189,22 @@ def _highlight_best_metrics(data: pd.DataFrame) -> pd.DataFrame:
     closest_to_zero = ['最大回撤(%)']
 
     for col in higher_better:
+        if col not in data.columns:
+            continue
         numeric = _numeric_column(data[col])
         if not numeric.empty:
             styles.loc[numeric.idxmax(), col] = 'background-color: #d4edda'
 
     for col in lower_better:
+        if col not in data.columns:
+            continue
         numeric = _numeric_column(data[col])
         if not numeric.empty:
             styles.loc[numeric.idxmin(), col] = 'background-color: #d4edda'
 
     for col in closest_to_zero:
+        if col not in data.columns:
+            continue
         numeric = _numeric_column(data[col])
         if not numeric.empty:
             styles.loc[numeric.abs().idxmin(), col] = 'background-color: #d4edda'
