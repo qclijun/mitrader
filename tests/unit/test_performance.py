@@ -58,6 +58,25 @@ class TestDateRanges:
         assert start == date(2024, 1, 1)
         assert end == date(2024, 4, 29)
 
+    @pytest.mark.parametrize(
+        ('label', 'expected_start'),
+        [
+            ('最近 1 年', date(2024, 1, 2)),
+            ('最近 3 年', date(2022, 1, 2)),
+            ('最近 5 年', date(2020, 1, 3)),
+        ],
+    )
+    def test_recent_year_ranges_use_fixed_inclusive_day_counts(self, label: str, expected_start: date):
+        df = pl.DataFrame({
+            'datetime': [date(2019, 1, 1), date(2024, 12, 31)],
+            'strategy': [0.0, 0.0],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+
+        start, end = resolve_date_range(df, label)
+
+        assert start == expected_start
+        assert end == date(2024, 12, 31)
+
     def test_resolve_date_range_custom_requires_custom_range(self):
         df = _returns_df()
 
@@ -150,6 +169,18 @@ class TestRecentReturns:
         row = result.row(0, named=True)
 
         assert row['latest_nav'] == pytest.approx(1.8)
+        assert row['current_drawdown'] == pytest.approx(-0.40)
+        assert row['year_max_drawdown'] == pytest.approx(-0.40)
+
+    def test_recent_returns_year_drawdown_uses_one_as_initial_high_water_mark(self):
+        df = pl.DataFrame({
+            'datetime': [date(2024, 1, 2)],
+            'strategy': [-0.10],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+
+        result = calculate_recent_returns(df, ['strategy'])
+        row = result.row(0, named=True)
+
         assert row['current_drawdown'] == pytest.approx(-0.10)
         assert row['year_max_drawdown'] == pytest.approx(-0.10)
 

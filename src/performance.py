@@ -40,7 +40,7 @@ def resolve_date_range(
         '最近 1 年': 365,
     }
     if range_label in days_by_label:
-        return max(max_date - timedelta(days=days_by_label[range_label]), min_date), max_date
+        return max(max_date - timedelta(days=days_by_label[range_label] - 1), min_date), max_date
 
     raise ValueError(f"Unknown date range: {range_label}")
 
@@ -177,10 +177,10 @@ def _period_drawdowns(returns: list[float]) -> list[float]:
         return []
     nav = 1.0
     drawdowns = []
-    running_max = None
+    running_max = 1.0
     for daily_return in returns:
         nav *= 1.0 + float(daily_return)
-        running_max = nav if running_max is None else max(running_max, nav)
+        running_max = max(running_max, nav)
         drawdowns.append((nav / running_max) - 1.0 if running_max else 0.0)
     return drawdowns
 
