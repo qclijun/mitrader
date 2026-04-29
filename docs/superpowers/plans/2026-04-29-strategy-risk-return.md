@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the existing K-line page intact. Add one thin Streamlit page under `pages/` and three focused modules under `src/`: CSV loading/validation, pure performance calculations, and Plotly chart construction. Drive implementation with unit tests first, then add a focused E2E smoke test for the new page.
 
-**Tech Stack:** Python 3.14, Streamlit, Polars, Plotly, pytest, Playwright E2E tests, graphify.
+**Tech Stack:** Python 3.14, Streamlit, Polars, Pandas Styler, Plotly, pytest, Playwright E2E tests, graphify.
 
 ---
 
@@ -15,18 +15,24 @@
 - Create: `src/pnl_loader.py`
   - Owns loading and validation for daily return CSV files.
   - Public API: `load_pnl_data(file_path: str) -> pl.DataFrame`, `get_return_columns(df: pl.DataFrame) -> list[str]`.
+  - Enforces the input contract from the design spec: timezone-free business dates, one row per date, finite daily returns, and no daily return below `-1.0`.
 
 - Create: `src/performance.py`
   - Owns pure calculations for date ranges, net value, drawdown, risk metrics, and recent returns.
   - Public API: `resolve_date_range`, `filter_returns_by_date`, `calculate_nav_and_drawdown`, `calculate_metrics_table`, `calculate_recent_returns`.
+  - Risk/return metrics use the selected analysis range; recent returns use the full loaded return data through the latest available data date.
 
 - Create: `src/performance_charts.py`
   - Owns Plotly figure construction.
   - Public API: `build_nav_drawdown_chart(nav_drawdown_df: pl.DataFrame, series_names: list[str]) -> go.Figure`.
 
-- Create: `pages/1_策略风险收益评估.py`
+- Create: `pages/1_strategy_risk_return.py`
   - Owns Streamlit controls and presentation for the new feature.
   - Does not contain formula logic.
+  - Uses Pandas Styler for metrics-table highlighting, so `pandas` must be a direct project dependency.
+
+- Modify: `pyproject.toml`
+  - Add `pandas` as a direct dependency for table styling.
 
 - Create: `tests/unit/test_pnl_loader.py`
   - Unit coverage for CSV loading and validation.
@@ -44,6 +50,8 @@
 - Modify after code changes: generated files under `graphify-out/`
   - Run `graphify update .`.
   - Review and avoid committing unrelated `graphify-out/cache` churn unless graphify changes are intentionally included.
+
+Do not create commits during implementation unless the user explicitly asks for commits. Treat the commit commands below as optional checkpoints for a human maintainer, not mandatory agent actions.
 
 ## Task 1: PnL CSV Loader
 
@@ -112,6 +120,27 @@ class TestLoadPnlData:
         with pytest.raises(ValueError, match='Unable to parse datetime'):
             load_pnl_data(str(p))
 
+    def test_load_pnl_data_rejects_empty_datetime_value(self, tmp_path: Path):
+        p = tmp_path / 'pnl.csv'
+        p.write_text('datetime,kzz0\n,0.01\n')
+
+        with pytest.raises(ValueError, match='Unable to parse datetime'):
+            load_pnl_data(str(p))
+
+    def test_load_pnl_data_rejects_timezone_aware_datetime(self, tmp_path: Path):
+        p = tmp_path / 'pnl.csv'
+        p.write_text('datetime,kzz0\n2024-01-02T00:00:00+08:00,0.01\n')
+
+        with pytest.raises(ValueError, match='Timezone-aware datetime values are not supported'):
+            load_pnl_data(str(p))
+
+    def test_load_pnl_data_rejects_timezone_aware_datetime_without_colon(self, tmp_path: Path):
+        p = tmp_path / 'pnl.csv'
+        p.write_text('datetime,kzz0\n2024-01-02T00:00:00+0800,0.01\n')
+
+        with pytest.raises(ValueError, match='Timezone-aware datetime values are not supported'):
+            load_pnl_data(str(p))
+
     def test_load_pnl_data_duplicate_datetime(self, tmp_path: Path):
         p = tmp_path / 'pnl.csv'
         p.write_text(
@@ -131,6 +160,27 @@ class TestLoadPnlData:
         )
 
         with pytest.raises(ValueError, match='Unable to parse numeric return column: kzz0'):
+            load_pnl_data(str(p))
+
+    def test_load_pnl_data_rejects_return_below_minus_one(self, tmp_path: Path):
+        p = tmp_path / 'pnl.csv'
+        p.write_text(
+            'datetime,kzz0\n'
+            '2024-01-02,-1.01\n'
+        )
+
+        with pytest.raises(ValueError, match='Return values below -1.0 in column: kzz0'):
+            load_pnl_data(str(p))
+
+    @pytest.mark.parametrize('bad_value', ['NaN', 'inf', '-inf'])
+    def test_load_pnl_data_rejects_non_finite_returns(self, tmp_path: Path, bad_value: str):
+        p = tmp_path / 'pnl.csv'
+        p.write_text(
+            'datetime,kzz0\n'
+            f'2024-01-02,{bad_value}\n'
+        )
+
+        with pytest.raises(ValueError, match='Non-finite return values in column: kzz0'):
             load_pnl_data(str(p))
 
     def test_load_pnl_data_fills_missing_returns_with_zero(self, tmp_path: Path):
@@ -233,10 +283,22 @@ def load_pnl_data(file_path: str) -> pl.DataFrame:
         raise ValueError("No return series columns found in pnl.csv")
 
     try:
+        timezone_values = df.filter(
+            pl.col(DATE_COLUMN).str.contains(r'(Z|[+-]\d{2}:?\d{2})$')
+        )
+        if timezone_values.height > 0:
+            raise ValueError("Timezone-aware datetime values are not supported")
+
         df = df.with_columns(
             pl.col(DATE_COLUMN).str.to_datetime(strict=True).dt.date().alias(DATE_COLUMN)
         )
+        if df.filter(pl.col(DATE_COLUMN).is_null()).height > 0:
+            raise ValueError("Unable to parse datetime column: null values found")
     except Exception as exc:
+        if str(exc) == "Timezone-aware datetime values are not supported":
+            raise ValueError(str(exc)) from exc
+        if str(exc) == "Unable to parse datetime column: null values found":
+            raise ValueError(str(exc)) from exc
         raise ValueError(f"Unable to parse datetime column: {exc}") from exc
 
     for col in return_columns:
@@ -246,6 +308,10 @@ def load_pnl_data(file_path: str) -> pl.DataFrame:
             )
         except Exception as exc:
             raise ValueError(f"Unable to parse numeric return column: {col}") from exc
+        if df.filter(~pl.col(col).is_finite()).height > 0:
+            raise ValueError(f"Non-finite return values in column: {col}")
+        if df.filter(pl.col(col) < -1.0).height > 0:
+            raise ValueError(f"Return values below -1.0 in column: {col}")
 
     duplicate_count = df.group_by(DATE_COLUMN).len().filter(pl.col('len') > 1).height
     if duplicate_count > 0:
@@ -264,7 +330,7 @@ uv run pytest tests/unit/test_pnl_loader.py -v
 
 Expected: PASS for all tests in `tests/unit/test_pnl_loader.py`.
 
-- [ ] **Step 5: Commit loader slice**
+- [ ] **Step 5: Optional commit loader slice**
 
 Run:
 
@@ -273,7 +339,7 @@ git add src/pnl_loader.py tests/unit/test_pnl_loader.py
 git commit -m "feat: load pnl return data"
 ```
 
-Expected: commit succeeds.
+Expected: commit succeeds if the maintainer wants slice commits. Agents should skip this step unless explicitly asked to commit.
 
 ## Task 2: Core Performance Calculations
 
@@ -346,6 +412,18 @@ class TestDateRanges:
         assert start == date(2024, 1, 1)
         assert end == date(2024, 4, 29)
 
+    def test_resolve_date_range_custom_requires_custom_range(self):
+        df = _returns_df()
+
+        with pytest.raises(ValueError, match='Custom date range is required'):
+            resolve_date_range(df, '自定义')
+
+    def test_resolve_date_range_rejects_unknown_label(self):
+        df = _returns_df()
+
+        with pytest.raises(ValueError, match='Unknown date range'):
+            resolve_date_range(df, '最近 2 年')
+
     def test_filter_returns_by_date(self):
         df = _returns_df()
 
@@ -400,6 +478,23 @@ class TestRecentReturns:
         assert row['ytd_return'] == pytest.approx((1.01 * 0.98 * 1.03 * 1.04) - 1)
         assert row['current_drawdown'] <= 0.0
         assert row['year_max_drawdown'] <= 0.0
+
+    def test_recent_returns_current_drawdown_uses_current_year(self):
+        df = pl.DataFrame({
+            'datetime': [
+                date(2023, 12, 29),
+                date(2024, 1, 2),
+                date(2024, 1, 3),
+            ],
+            'strategy': [2.0, -1 / 3, -0.10],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+
+        result = calculate_recent_returns(df, ['strategy'])
+        row = result.row(0, named=True)
+
+        assert row['latest_nav'] == pytest.approx(1.8)
+        assert row['current_drawdown'] == pytest.approx(-0.10)
+        assert row['year_max_drawdown'] == pytest.approx(-0.10)
 
 
 @pytest.mark.unit
@@ -458,6 +553,43 @@ class TestMetricsTable:
         assert row['sortino_ratio'] is None
         assert row['calmar_ratio'] is None
 
+    def test_single_observation_keeps_annualized_return_but_blanks_sample_stats(self):
+        df = pl.DataFrame({
+            'datetime': [date(2024, 1, 2)],
+            'strategy': [0.01],
+            'benchmark': [0.0],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+
+        result = calculate_metrics_table(df, ['strategy'], benchmark='benchmark')
+        row = result.row(0, named=True)
+
+        assert row['annualized_return'] is not None
+        assert row['annualized_volatility'] is None
+        assert row['sharpe_ratio'] is None
+        assert row['alpha'] is None
+        assert row['beta'] is None
+
+    def test_minus_one_return_annualizes_to_minus_one(self):
+        df = pl.DataFrame({
+            'datetime': [date(2024, 1, 2)],
+            'strategy': [-1.0],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+
+        result = calculate_metrics_table(df, ['strategy'], benchmark=None)
+        row = result.row(0, named=True)
+
+        assert row['annualized_return'] == pytest.approx(-1.0)
+        assert row['max_drawdown'] == pytest.approx(-1.0)
+
+    def test_constant_benchmark_blanks_regression_metrics(self):
+        df = _full_year_df()
+
+        result = calculate_metrics_table(df, ['strategy'], benchmark='benchmark')
+        row = result.row(0, named=True)
+
+        assert row['alpha'] is None
+        assert row['beta'] is None
+
 
 def test_annualization_days_is_252():
     assert ANNUALIZATION_DAYS == 252
@@ -503,7 +635,9 @@ def resolve_date_range(
     min_date = df[DATE_COLUMN].min()
     max_date = df[DATE_COLUMN].max()
 
-    if custom_range is not None:
+    if range_label == '自定义':
+        if custom_range is None:
+            raise ValueError("Custom date range is required")
         start, end = custom_range
         return max(start, min_date), min(end, max_date)
 
@@ -520,7 +654,7 @@ def resolve_date_range(
     if range_label in days_by_label:
         return max(max_date - timedelta(days=days_by_label[range_label]), min_date), max_date
 
-    return min_date, max_date
+    raise ValueError(f"Unknown date range: {range_label}")
 
 
 def filter_returns_by_date(df: pl.DataFrame, start_date: date, end_date: date) -> pl.DataFrame:
@@ -566,11 +700,11 @@ def calculate_recent_returns(df: pl.DataFrame, series_names: list[str]) -> pl.Da
     for name in series_names:
         nav_dd = calculate_nav_and_drawdown(df, [name])
         latest_nav = nav_dd[f'{name}_nav'][-1]
-        current_drawdown = nav_dd[f'{name}_drawdown'][-1]
 
         year_df = filter_returns_by_date(df, year_start, last_date)
         year_dd = calculate_nav_and_drawdown(year_df, [name])
         year_max_drawdown = year_dd[f'{name}_drawdown'].min()
+        current_drawdown = year_dd[f'{name}_drawdown'][-1]
 
         rows.append({
             'series': name,
@@ -635,10 +769,10 @@ def calculate_metrics_table(
     return pl.DataFrame(rows)
 
 
-def _compound_range_return(df: pl.DataFrame, series_name: str, start_date: date, end_date: date) -> float:
+def _compound_range_return(df: pl.DataFrame, series_name: str, start_date: date, end_date: date) -> Optional[float]:
     range_df = filter_returns_by_date(df, start_date, end_date)
     if range_df.is_empty():
-        range_df = df
+        return None
     nav = 1.0
     for daily_return in range_df[series_name].to_list():
         nav *= 1.0 + float(daily_return)
@@ -651,8 +785,10 @@ def _annualized_return(returns: list[float]) -> Optional[float]:
     nav = 1.0
     for daily_return in returns:
         nav *= 1.0 + daily_return
-    if nav <= 0:
+    if nav < 0:
         return None
+    if nav == 0:
+        return -1.0
     years = len(returns) / ANNUALIZATION_DAYS
     if years <= 0:
         return None
@@ -708,7 +844,7 @@ uv run pytest tests/unit/test_performance.py -v
 
 Expected: PASS for all tests in `tests/unit/test_performance.py`.
 
-- [ ] **Step 5: Commit performance slice**
+- [ ] **Step 5: Optional commit performance slice**
 
 Run:
 
@@ -717,7 +853,7 @@ git add src/performance.py tests/unit/test_performance.py
 git commit -m "feat: calculate strategy performance metrics"
 ```
 
-Expected: commit succeeds.
+Expected: commit succeeds if the maintainer wants slice commits. Agents should skip this step unless explicitly asked to commit.
 
 ## Task 3: Combined Net Value And Drawdown Chart
 
@@ -748,10 +884,10 @@ class TestBuildNavDrawdownChart:
     def test_build_nav_drawdown_chart_structure(self):
         df = pl.DataFrame({
             'datetime': [date(2024, 1, 2), date(2024, 1, 3)],
-            'strategy_nav': [1.0, 1.01],
+            'strategy_nav': [1.01, 0.9999],
             'strategy_drawdown': [0.0, -0.01],
-            'benchmark_nav': [1.0, 0.99],
-            'benchmark_drawdown': [0.0, -0.01],
+            'benchmark_nav': [0.99, 0.9801],
+            'benchmark_drawdown': [-0.01, -0.0199],
         }).with_columns(pl.col('datetime').cast(pl.Date))
 
         fig = build_nav_drawdown_chart(df, ['strategy', 'benchmark'])
@@ -766,7 +902,7 @@ class TestBuildNavDrawdownChart:
     def test_build_nav_drawdown_chart_uses_consistent_colors(self):
         df = pl.DataFrame({
             'datetime': [date(2024, 1, 2), date(2024, 1, 3)],
-            'strategy_nav': [1.0, 1.01],
+            'strategy_nav': [1.01, 0.9999],
             'strategy_drawdown': [0.0, -0.01],
         }).with_columns(pl.col('datetime').cast(pl.Date))
 
@@ -879,7 +1015,7 @@ uv run pytest tests/unit/test_performance_charts.py -v
 
 Expected: PASS for all tests in `tests/unit/test_performance_charts.py`.
 
-- [ ] **Step 5: Commit chart slice**
+- [ ] **Step 5: Optional commit chart slice**
 
 Run:
 
@@ -888,16 +1024,38 @@ git add src/performance_charts.py tests/unit/test_performance_charts.py
 git commit -m "feat: build performance comparison chart"
 ```
 
-Expected: commit succeeds.
+Expected: commit succeeds if the maintainer wants slice commits. Agents should skip this step unless explicitly asked to commit.
 
 ## Task 4: New Streamlit Risk/Return Page
 
 **Files:**
-- Create: `pages/1_策略风险收益评估.py`
+- Modify: `pyproject.toml`
+- Create: `pages/1_strategy_risk_return.py`
 
-- [ ] **Step 1: Create the Streamlit page**
+- [ ] **Step 1: Add explicit Pandas dependency**
 
-Create `pages/1_策略风险收益评估.py` with:
+Modify `pyproject.toml`:
+
+```toml
+dependencies = [
+    "pandas>=2.3.0",
+    "plotly>=6.7.0",
+    "polars>=1.39.3",
+    "streamlit>=1.56.0",
+]
+```
+
+Run:
+
+```bash
+uv sync
+```
+
+Expected: dependency sync succeeds and `uv.lock` is updated if needed.
+
+- [ ] **Step 2: Create the Streamlit page**
+
+Create `pages/1_strategy_risk_return.py` with:
 
 ```python
 """
@@ -964,7 +1122,7 @@ def main():
     selected_series = st.multiselect(
         '选择收益序列',
         options=return_columns,
-        default=return_columns[: min(2, len(return_columns))],
+        default=return_columns[:1],
         help='可选择一个或多个策略或指数列进行分析',
     )
 
@@ -1025,7 +1183,7 @@ def main():
     fig = build_nav_drawdown_chart(nav_drawdown_df, selected_series)
     st.plotly_chart(fig, use_container_width=True)
 
-    recent_returns = calculate_recent_returns(filtered_df, selected_series)
+    recent_returns = calculate_recent_returns(pnl_df, selected_series)
     metrics = calculate_metrics_table(filtered_df, selected_series, benchmark=benchmark)
 
     st.subheader('最近收益情况')
@@ -1046,12 +1204,12 @@ def main():
 def _format_recent_returns(df: pl.DataFrame) -> pl.DataFrame:
     return df.select([
         pl.col('series').alias('收益序列'),
-        pl.col('latest_nav').round(4).alias('最新净值'),
+        pl.col('latest_nav').round(4).alias('最新累计净值'),
         (pl.col('wtd_return') * 100).round(2).alias('WTD(%)'),
         (pl.col('mtd_return') * 100).round(2).alias('MTD(%)'),
         (pl.col('ytd_return') * 100).round(2).alias('YTD(%)'),
         (pl.col('year_max_drawdown') * 100).round(2).alias('本年最大回撤(%)'),
-        (pl.col('current_drawdown') * 100).round(2).alias('当前回撤(%)'),
+        (pl.col('current_drawdown') * 100).round(2).alias('本年当前回撤(%)'),
     ])
 
 
@@ -1062,18 +1220,22 @@ def _format_metrics(df: pl.DataFrame) -> pl.DataFrame:
         _percent_col('annualized_volatility', '年化波动率(%)'),
         _percent_col('excess_annualized_return', '超额年化收益率(%)'),
         _percent_col('excess_annualized_volatility', '超额年化波动率(%)'),
-        pl.col('sharpe_ratio').round(4).alias('夏普率'),
+        _number_col('sharpe_ratio', '夏普率'),
         _percent_col('max_drawdown', '最大回撤(%)'),
-        pl.col('sortino_ratio').round(4).alias('索提诺比率'),
-        pl.col('calmar_ratio').round(4).alias('卡玛比率'),
-        pl.col('information_ratio').round(4).alias('信息比例'),
+        _number_col('sortino_ratio', '索提诺比率'),
+        _number_col('calmar_ratio', '卡玛比率'),
+        _number_col('information_ratio', '信息比例'),
         _percent_col('alpha', 'Alpha(%)'),
-        pl.col('beta').round(4).alias('Beta'),
+        _number_col('beta', 'Beta'),
     ]).to_pandas().fillna('-')
 
 
 def _percent_col(source: str, alias: str) -> pl.Expr:
-    return (pl.col(source) * 100).round(2).alias(alias)
+    return (pl.col(source).cast(pl.Float64, strict=False) * 100).round(2).alias(alias)
+
+
+def _number_col(source: str, alias: str) -> pl.Expr:
+    return pl.col(source).cast(pl.Float64, strict=False).round(4).alias(alias)
 
 
 def _highlight_best_metrics(data):
@@ -1120,17 +1282,17 @@ if __name__ == '__main__':
     main()
 ```
 
-- [ ] **Step 2: Run new page import smoke check**
+- [ ] **Step 3: Run new page import smoke check**
 
 Run:
 
 ```bash
-uv run python -m py_compile pages/1_策略风险收益评估.py
+uv run python -m py_compile pages/1_strategy_risk_return.py
 ```
 
 Expected: command exits with status 0.
 
-- [ ] **Step 3: Run all unit tests**
+- [ ] **Step 4: Run all unit tests**
 
 Run:
 
@@ -1140,85 +1302,72 @@ uv run pytest tests/unit -v
 
 Expected: PASS for all unit tests.
 
-- [ ] **Step 4: Commit page slice**
+- [ ] **Step 5: Optional commit page slice**
 
 Run:
 
 ```bash
-git add pages/1_策略风险收益评估.py
+git add pyproject.toml uv.lock pages/1_strategy_risk_return.py
 git commit -m "feat: add strategy risk return page"
 ```
 
-Expected: commit succeeds.
+Expected: commit succeeds if the maintainer wants slice commits. Agents should skip this step unless explicitly asked to commit.
 
-## Task 5: Page Compatibility Fixes
+## Task 5: Page Compatibility Smoke Checks
 
 **Files:**
 - Modify if tests reveal issues: `src/performance.py`
 - Modify if tests reveal issues: `src/performance_charts.py`
-- Modify if tests reveal issues: `pages/1_策略风险收益评估.py`
+- Modify if tests reveal issues: `pages/1_strategy_risk_return.py`
 
 - [ ] **Step 1: Run a focused integration smoke from real sample data**
 
 Run:
 
 ```bash
-uv run python -c "from src.pnl_loader import load_pnl_data, get_return_columns; from src.performance import calculate_nav_and_drawdown, calculate_metrics_table, calculate_recent_returns; df=load_pnl_data('sample_data/pnl.csv'); cols=get_return_columns(df); selected=cols[:2]; print(cols); print(calculate_nav_and_drawdown(df, selected).height); print(calculate_metrics_table(df, selected, benchmark=cols[0]).height); print(calculate_recent_returns(df, selected).height)"
+uv run python -c "from src.pnl_loader import load_pnl_data, get_return_columns; from src.performance import calculate_nav_and_drawdown, calculate_metrics_table, calculate_recent_returns; df=load_pnl_data('sample_data/pnl.csv'); cols=get_return_columns(df); selected=cols[:1]; print(cols); print(calculate_nav_and_drawdown(df, selected).height); print(calculate_metrics_table(df, selected, benchmark=cols[0]).height); print(calculate_recent_returns(df, selected).height)"
 ```
 
 Expected: prints the available return columns and three positive row counts without exceptions.
 
-- [ ] **Step 2: Fix any pandas dependency issue from Streamlit styling**
+- [ ] **Step 2: Confirm Pandas dependency is available**
 
-If Step 1 passes but page validation fails because `pandas` is unavailable, inspect whether Streamlit installed pandas transitively:
+Because the page uses Pandas Styler for table highlighting, verify the direct dependency:
 
 ```bash
 uv run python -c "import pandas; print(pandas.__version__)"
 ```
 
-Expected: prints a pandas version. If it fails, modify `pyproject.toml` to add:
+Expected: prints a pandas version.
 
-```toml
-dependencies = [
-    "pandas>=2.3.0",
-    "plotly>=6.7.0",
-    "polars>=1.39.3",
-    "streamlit>=1.56.0",
-]
-```
+- [ ] **Step 3: Optional commit compatibility fixes if any were needed**
 
-Then run:
-
-```bash
-uv sync
-uv run pytest tests/unit -v
-```
-
-Expected: dependency sync succeeds and unit tests pass.
-
-- [ ] **Step 3: Commit compatibility fixes if any were needed**
-
-If Step 2 changed `pyproject.toml` or `uv.lock`, run:
+If Task 4 changed `pyproject.toml` or `uv.lock` and the maintainer wants a separate compatibility commit, run:
 
 ```bash
 git add pyproject.toml uv.lock
 git commit -m "fix: include dataframe styling dependency"
 ```
 
-Expected: commit succeeds. If no files changed, skip this step.
+Expected: commit succeeds if the maintainer wants slice commits. If no files changed, skip this step. Agents should skip this step unless explicitly asked to commit.
 
 ## Task 6: E2E Coverage For The New Page
 
 **Files:**
 - Modify: `tests/e2e/test_app.py`
 
-- [ ] **Step 1: Add E2E helper constants and test class**
+- [ ] **Step 1: Add E2E helper import, constants, and test class**
 
-Modify `tests/e2e/test_app.py` by adding these constants near existing path constants:
+Modify `tests/e2e/test_app.py` by adding this import near the top imports:
+
+```python
+import re
+```
+
+Add this constant near existing path constants:
 
 ```python
 PNL_PATH = str(Path(__file__).parent.parent.parent / 'sample_data' / 'pnl.csv')
-STRATEGY_PAGE_URL = 'http://localhost:8501/策略风险收益评估'
 ```
 
 Append this test class after `TestMitraderUI`:
@@ -1229,7 +1378,8 @@ class TestStrategyRiskReturnUI:
 
     def test_e2e_strategy_page_loads_pnl_and_renders_outputs(self, browser_page):
         """New multipage page loads pnl.csv and renders chart plus tables."""
-        browser_page.goto(STRATEGY_PAGE_URL, wait_until='networkidle')
+        browser_page.get_by_role('link', name=re.compile('strategy.*risk.*return', re.I)).click()
+        browser_page.wait_for_selector('text=策略风险收益评估及对比', timeout=10_000)
 
         inputs = browser_page.locator('[data-testid="stTextInput"] input').all()
         inputs[0].fill(PNL_PATH)
@@ -1244,7 +1394,7 @@ class TestStrategyRiskReturnUI:
         page_text = browser_page.inner_text('body')
         assert '最近收益情况' in page_text
         assert '风险收益评估' in page_text
-        assert '最新净值' in page_text
+        assert '最新累计净值' in page_text
         assert '年化收益率' in page_text
 ```
 
@@ -1268,7 +1418,7 @@ uv run pytest tests/e2e/test_app.py -v
 
 Expected: existing K-line tests still pass, and the new page test passes or skips only for missing Playwright.
 
-- [ ] **Step 4: Commit E2E slice**
+- [ ] **Step 4: Optional commit E2E slice**
 
 Run:
 
@@ -1277,7 +1427,7 @@ git add tests/e2e/test_app.py
 git commit -m "test: cover strategy risk return page"
 ```
 
-Expected: commit succeeds.
+Expected: commit succeeds if the maintainer wants slice commits. Agents should skip this step unless explicitly asked to commit.
 
 ## Task 7: Full Verification And Graph Update
 
@@ -1312,9 +1462,9 @@ Run:
 git status --short
 ```
 
-Expected: code/test changes are already committed by earlier tasks. Graph changes may appear under `graphify-out/`. Do not stage unrelated `graphify-out/cache` churn unless graph maintenance is explicitly desired.
+Expected: code/test changes are present in the working tree or committed if the maintainer requested commits. Graph changes may appear under `graphify-out/`. Do not stage unrelated `graphify-out/cache` churn unless graph maintenance is explicitly desired.
 
-- [ ] **Step 4: Commit intended graph artifacts**
+- [ ] **Step 4: Optional commit intended graph artifacts**
 
 If `graphify-out/GRAPH_REPORT.md`, `graphify-out/graph.json`, `graphify-out/graph.html`, `graphify-out/manifest.json`, or `graphify-out/cost.json` changed and should be recorded, run:
 
@@ -1323,7 +1473,7 @@ git add graphify-out/GRAPH_REPORT.md graphify-out/graph.json graphify-out/graph.
 git commit -m "docs: update codebase graph"
 ```
 
-Expected: commit succeeds. If only `graphify-out/cache` changed, skip this commit unless explicitly instructed.
+Expected: commit succeeds if the maintainer wants a graph commit. If only `graphify-out/cache` changed, skip this commit unless explicitly instructed.
 
 - [ ] **Step 5: Final status check**
 
