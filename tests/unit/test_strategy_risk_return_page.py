@@ -108,6 +108,67 @@ class TestStrategyTablePreparation:
 
 
 @pytest.mark.unit
+class TestStrategySummary:
+
+    def test_summary_values_use_selected_series_for_headline_metrics(self):
+        page = _load_strategy_page_module()
+        metrics = pl.DataFrame({
+            'series': ['strategy_a', 'strategy_b', 'jsl_index'],
+            'annualized_return': [0.10, 0.18, 0.30],
+            'max_drawdown': [-0.05, -0.12, -0.01],
+        })
+
+        summary = dict(page._summary_values(
+            start_date=date(2024, 1, 2),
+            end_date=date(2024, 12, 31),
+            latest_date=date(2025, 1, 3),
+            selected_count=2,
+            benchmark='jsl_index',
+            metrics=metrics,
+            selected_series=['strategy_a', 'strategy_b'],
+        ))
+
+        assert summary['分析区间'] == '2024-01-02 至 2024-12-31'
+        assert summary['最新数据'] == '2025-01-03'
+        assert summary['收益序列'] == '2 个'
+        assert summary['基准'] == 'jsl_index'
+        assert summary['最佳年化收益'] == 'strategy_b 18.00%'
+        assert summary['最低最大回撤'] == 'strategy_a -5.00%'
+
+    def test_summary_values_show_dash_when_metrics_are_unavailable(self):
+        page = _load_strategy_page_module()
+        metrics = pl.DataFrame({
+            'series': ['strategy'],
+            'annualized_return': [None],
+            'max_drawdown': [None],
+        })
+
+        summary = dict(page._summary_values(
+            start_date=date(2024, 1, 2),
+            end_date=date(2024, 1, 3),
+            latest_date=date(2024, 1, 3),
+            selected_count=1,
+            benchmark=None,
+            metrics=metrics,
+            selected_series=['strategy'],
+        ))
+
+        assert summary['基准'] == '未选择'
+        assert summary['最佳年化收益'] == '-'
+        assert summary['最低最大回撤'] == '-'
+
+    def test_summary_html_escapes_labels_and_values(self):
+        page = _load_strategy_page_module()
+
+        html = page._summary_html([('基准', 'a<b&c')])
+
+        assert 'summary-grid' in html
+        assert 'summary-item' in html
+        assert 'a&lt;b&amp;c' in html
+        assert 'a<b&c' not in html
+
+
+@pytest.mark.unit
 class TestMetricsHighlighting:
 
     def test_recent_returns_formatting_uses_percentages_and_dash_for_undefined_values(self):

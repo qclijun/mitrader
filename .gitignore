@@ -151,3 +151,4 @@ graphify-out/
 .gitnexus
 .claude/skills
 .playwright
+.playwright-cli/

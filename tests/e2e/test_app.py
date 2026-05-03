@@ -136,7 +136,7 @@ class TestStrategyRiskReturnUI:
     def test_e2e_strategy_page_stays_empty_before_loading_pnl(self, browser_page):
         """Opening the page shows the default sample path but does not load outputs yet."""
         browser_page.get_by_role('link', name=re.compile('strategy.*risk.*return', re.I)).click()
-        browser_page.wait_for_selector('text=策略风险收益评估及对比', timeout=10_000)
+        browser_page.wait_for_selector('text=策略风险收益', timeout=10_000)
 
         pnl_input = browser_page.locator('[data-testid="stTextInput"] input').first
         assert pnl_input.input_value().endswith('sample_data/pnl.csv')
@@ -148,7 +148,7 @@ class TestStrategyRiskReturnUI:
     def test_e2e_strategy_page_loads_pnl_and_renders_outputs(self, browser_page):
         """New multipage page loads pnl.csv and renders chart plus tables."""
         browser_page.get_by_role('link', name=re.compile('strategy.*risk.*return', re.I)).click()
-        browser_page.wait_for_selector('text=策略风险收益评估及对比', timeout=10_000)
+        browser_page.wait_for_selector('text=策略风险收益', timeout=10_000)
 
         inputs = browser_page.locator('[data-testid="stTextInput"] input').all()
         inputs[0].fill(PNL_PATH)
@@ -165,6 +165,8 @@ class TestStrategyRiskReturnUI:
         assert browser_page.locator('[data-testid="stTable"]').count() >= 2
 
         page_text = browser_page.inner_text('body')
+        assert '分析区间' in page_text
+        assert '最佳年化收益' in page_text
         assert '最近收益情况' in page_text
         assert '风险收益评估' in page_text
         assert '净值' in page_text
