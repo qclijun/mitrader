@@ -176,7 +176,7 @@ def main():
     )
 
     nav_drawdown_df = calculate_nav_and_drawdown(filtered_df, chart_series)
-    fig = build_nav_drawdown_chart(nav_drawdown_df, chart_series)
+    fig = build_nav_drawdown_chart(nav_drawdown_df, chart_series, benchmark=benchmark)
     st.plotly_chart(fig, width='stretch')
 
     st.subheader('最近收益情况')
