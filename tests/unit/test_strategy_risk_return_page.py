@@ -40,6 +40,20 @@ class TestStrategyPageCompatibility:
 @pytest.mark.unit
 class TestStrategyTablePreparation:
 
+    def test_chart_series_includes_hidden_benchmark_after_selected_series(self):
+        page = _load_strategy_page_module()
+
+        chart_series = page._chart_series(['strategy'], benchmark='jsl_index')
+
+        assert chart_series == ['strategy', 'jsl_index']
+
+    def test_chart_series_does_not_duplicate_visible_benchmark(self):
+        page = _load_strategy_page_module()
+
+        chart_series = page._chart_series(['strategy', 'jsl_index'], benchmark='jsl_index')
+
+        assert chart_series == ['strategy', 'jsl_index']
+
     def test_recent_returns_use_full_loaded_data_while_metrics_use_analysis_range(self):
         page = _load_strategy_page_module()
         full_df = pl.DataFrame({
@@ -64,6 +78,33 @@ class TestStrategyTablePreparation:
         assert recent_row['latest_nav'] == pytest.approx(1.10 * 1.20 * 0.90)
         assert recent_row['wtd_return'] == pytest.approx((1.20 * 0.90) - 1)
         assert metrics_row['annualized_return'] == pytest.approx((1.10 ** 252) - 1)
+
+    def test_tables_include_hidden_benchmark_series(self):
+        page = _load_strategy_page_module()
+        full_df = pl.DataFrame({
+            'datetime': [
+                date(2024, 1, 2),
+                date(2024, 1, 3),
+            ],
+            'strategy': [0.10, -0.05],
+            'jsl_index': [0.01, 0.02],
+        }).with_columns(pl.col('datetime').cast(pl.Date))
+        visible_series = page._chart_series(['strategy'], benchmark='jsl_index')
+
+        recent_returns, metrics = page.prepare_strategy_tables(
+            full_df,
+            full_df,
+            visible_series,
+            benchmark='jsl_index',
+        )
+
+        assert recent_returns['series'].to_list() == ['strategy', 'jsl_index']
+        assert metrics['series'].to_list() == ['strategy', 'jsl_index']
+        benchmark_row = metrics.filter(pl.col('series') == 'jsl_index').row(0, named=True)
+        assert benchmark_row['annualized_return'] is not None
+        assert benchmark_row['excess_annualized_return'] is None
+        assert benchmark_row['alpha'] is None
+        assert benchmark_row['beta'] is None
 
 
 @pytest.mark.unit

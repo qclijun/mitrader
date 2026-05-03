@@ -120,14 +120,15 @@ def main():
 
     st.caption(f'分析区间：{start_date} 至 {end_date}')
 
-    nav_drawdown_df = calculate_nav_and_drawdown(filtered_df, selected_series)
-    fig = build_nav_drawdown_chart(nav_drawdown_df, selected_series)
+    chart_series = _chart_series(selected_series, benchmark)
+    nav_drawdown_df = calculate_nav_and_drawdown(filtered_df, chart_series)
+    fig = build_nav_drawdown_chart(nav_drawdown_df, chart_series)
     st.plotly_chart(fig, use_container_width=True)
 
     recent_returns, metrics = prepare_strategy_tables(
         pnl_df,
         filtered_df,
-        selected_series,
+        chart_series,
         benchmark=benchmark,
     )
 
@@ -148,6 +149,13 @@ def prepare_strategy_tables(
     recent_returns = calculate_recent_returns(loaded_df, selected_series)
     metrics = calculate_metrics_table(analysis_df, selected_series, benchmark=benchmark)
     return recent_returns, metrics
+
+
+def _chart_series(selected_series: list[str], benchmark: Optional[str] = None) -> list[str]:
+    chart_series = list(selected_series)
+    if benchmark and benchmark not in chart_series:
+        chart_series.append(benchmark)
+    return chart_series
 
 
 def _format_recent_returns(df: pl.DataFrame) -> pd.DataFrame:
