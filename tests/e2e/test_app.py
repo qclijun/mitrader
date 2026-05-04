@@ -156,6 +156,8 @@ class TestStrategyRiskReturnUI:
 
         browser_page.wait_for_selector('[data-testid="stAlertContentSuccess"]', timeout=20_000)
         assert '数据加载成功' in browser_page.locator('[data-testid="stAlertContentSuccess"]').inner_text()
+        assert browser_page.get_by_role('button', name='全选').is_visible()
+        assert browser_page.get_by_role('button', name='清空').is_visible()
 
         browser_page.wait_for_selector('[data-testid="stPlotlyChart"]', timeout=20_000)
         chart = browser_page.locator('[data-testid="stPlotlyChart"]')
@@ -173,3 +175,11 @@ class TestStrategyRiskReturnUI:
         assert '净值' in page_text
         assert '回撤' in page_text
         assert '选择基准后显示超额收益、信息比例、Alpha 和 Beta' in page_text
+
+        browser_page.get_by_role('button', name='清空').click()
+        browser_page.wait_for_selector('text=请至少选择一个收益序列', timeout=20_000)
+        assert browser_page.locator('[data-testid="stPlotlyChart"]').count() == 0
+
+        browser_page.get_by_role('button', name='全选').click()
+        browser_page.wait_for_selector('[data-testid="stPlotlyChart"]', timeout=20_000)
+        assert '收益序列\n3 个' in browser_page.inner_text('body')

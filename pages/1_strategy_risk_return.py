@@ -22,6 +22,7 @@ from src.pnl_loader import get_return_columns, load_pnl_data
 RANGE_OPTIONS = ['全部', '最近 5 年', '最近 3 年', '最近 1 年', 'YTD', '自定义']
 BEST_RETURN_STYLE = 'background-color: #dcfce7; color: #166534'
 BEST_RISK_STYLE = 'background-color: #dbeafe; color: #1e40af'
+SELECTED_SERIES_KEY = 'strategy_risk_return_selected_series'
 SUMMARY_STYLE = """
 <style>
 .summary-grid {
@@ -98,14 +99,36 @@ def main():
 
     pnl_df: pl.DataFrame = st.session_state.pnl_df
     return_columns: list[str] = st.session_state.pnl_columns
+    min_date = pnl_df['datetime'].min()
+    max_date = pnl_df['datetime'].max()
+
+    if SELECTED_SERIES_KEY not in st.session_state:
+        st.session_state[SELECTED_SERIES_KEY] = return_columns[:1]
+    else:
+        current_selected = st.session_state[SELECTED_SERIES_KEY]
+        if any(series not in return_columns for series in current_selected):
+            st.session_state[SELECTED_SERIES_KEY] = _normalize_selected_series(
+                current_selected,
+                return_columns,
+            )
 
     control_cols = st.columns([2.2, 1.2, 2.1])
     with control_cols[0]:
+        header_cols = st.columns([1.0, 0.45, 0.45])
+        with header_cols[0]:
+            st.markdown('收益序列')
+        with header_cols[1]:
+            if st.button('全选'):
+                st.session_state[SELECTED_SERIES_KEY] = list(return_columns)
+        with header_cols[2]:
+            if st.button('清空'):
+                st.session_state[SELECTED_SERIES_KEY] = []
         selected_series = st.multiselect(
             '收益序列',
             options=return_columns,
-            default=return_columns[:1],
-            help='可选择一个或多个策略或指数列进行分析',
+            key=SELECTED_SERIES_KEY,
+            label_visibility='collapsed',
+            help='可选择一个或多个策略或指数列进行分析。基准仅用于相对指标，也可以同时作为可见序列。',
         )
     with control_cols[1]:
         benchmark_options = ['不选择基准'] + return_columns
@@ -113,7 +136,7 @@ def main():
             '基准',
             options=benchmark_options,
             index=0,
-            help='基准用于计算超额收益、信息比例、Alpha 和 Beta',
+            help='基准仅用于超额收益、信息比例、Alpha 和 Beta；也可以同时出现在收益序列中。',
         )
         benchmark = None if benchmark_choice == '不选择基准' else benchmark_choice
     with control_cols[2]:
@@ -123,31 +146,31 @@ def main():
             horizontal=True,
             index=0,
         )
-
-    custom_range: Optional[tuple[date, date]] = None
-    min_date = pnl_df['datetime'].min()
-    max_date = pnl_df['datetime'].max()
-    if range_label == '自定义':
-        cols = st.columns([1, 1, 3])
-        with cols[0]:
-            custom_start = st.date_input(
-                '起始日期',
-                value=min_date,
-                min_value=min_date,
-                max_value=max_date,
-            )
-        with cols[1]:
-            custom_end = st.date_input(
-                '结束日期',
-                value=max_date,
-                min_value=min_date,
-                max_value=max_date,
-            )
-        custom_range = (custom_start, custom_end)
+        custom_range: Optional[tuple[date, date]] = None
+        if range_label == '自定义':
+            cols = st.columns([1, 1])
+            with cols[0]:
+                custom_start = st.date_input(
+                    '起始日期',
+                    value=min_date,
+                    min_value=min_date,
+                    max_value=max_date,
+                )
+            with cols[1]:
+                custom_end = st.date_input(
+                    '结束日期',
+                    value=max_date,
+                    min_value=min_date,
+                    max_value=max_date,
+                )
+            custom_range = (custom_start, custom_end)
 
     if not selected_series:
         st.warning('请至少选择一个收益序列')
         return
+    selection_warning = _selection_warning_text(len(selected_series))
+    if selection_warning:
+        st.warning(selection_warning)
 
     start_date, end_date = resolve_date_range(pnl_df, range_label, custom_range)
     if start_date > end_date:
@@ -227,6 +250,20 @@ def _chart_series(selected_series: list[str], benchmark: Optional[str] = None) -
     if benchmark and benchmark not in chart_series:
         chart_series.append(benchmark)
     return chart_series
+
+
+def _normalize_selected_series(
+    selected_series: list[str],
+    available_columns: list[str],
+) -> list[str]:
+    normalized = [series for series in selected_series if series in available_columns]
+    return normalized or available_columns[:1]
+
+
+def _selection_warning_text(selected_count: int) -> str | None:
+    if selected_count > 8:
+        return '已选择超过 8 个收益序列，图表可能拥挤；表格仍适合做广泛比较。'
+    return None
 
 
 def _render_summary(

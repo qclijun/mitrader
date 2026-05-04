@@ -106,6 +106,19 @@ class TestStrategyTablePreparation:
         assert benchmark_row['alpha'] is None
         assert benchmark_row['beta'] is None
 
+    def test_normalize_selected_series_drops_invalid_entries_and_keeps_default(self):
+        page = _load_strategy_page_module()
+
+        assert page._normalize_selected_series(['strategy', 'missing'], ['strategy', 'benchmark']) == ['strategy']
+        assert page._normalize_selected_series(['missing'], ['strategy', 'benchmark']) == ['strategy']
+        assert page._normalize_selected_series([], ['strategy', 'benchmark']) == ['strategy']
+
+    def test_selection_warning_text_triggers_only_for_large_selections(self):
+        page = _load_strategy_page_module()
+
+        assert page._selection_warning_text(8) is None
+        assert page._selection_warning_text(9) == '已选择超过 8 个收益序列，图表可能拥挤；表格仍适合做广泛比较。'
+
 
 @pytest.mark.unit
 class TestStrategySummary:
