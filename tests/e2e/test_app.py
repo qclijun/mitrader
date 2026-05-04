@@ -161,15 +161,15 @@ class TestStrategyRiskReturnUI:
         chart = browser_page.locator('[data-testid="stPlotlyChart"]')
         assert chart.is_visible()
         assert chart.locator('.js-plotly-plot, svg').count() > 0
-        browser_page.wait_for_selector('[data-testid="stTable"]', timeout=20_000)
-        assert browser_page.locator('[data-testid="stTable"]').count() >= 2
+        browser_page.wait_for_selector('[data-testid="stDataFrame"]', timeout=20_000)
+        assert browser_page.locator('[data-testid="stDataFrame"]').count() >= 2
 
         page_text = browser_page.inner_text('body')
         assert '分析区间' in page_text
         assert '最佳年化收益' in page_text
         assert '最近收益情况' in page_text
         assert '风险收益评估' in page_text
+        assert '核心指标' in page_text
         assert '净值' in page_text
         assert '回撤' in page_text
-        assert '最新累计净值' in page_text
-        assert '年化收益率' in page_text
+        assert '选择基准后显示超额收益、信息比例、Alpha 和 Beta' in page_text

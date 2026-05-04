@@ -187,12 +187,12 @@ class TestMetricsHighlighting:
         row = formatted.iloc[0]
 
         assert row['收益序列'] == 'strategy'
-        assert row['最新累计净值'] == pytest.approx(1.2346)
-        assert row['WTD(%)'] == pytest.approx(1.23)
-        assert row['MTD(%)'] == '-'
-        assert row['YTD(%)'] == pytest.approx(-5.68)
-        assert row['本年最大回撤(%)'] == pytest.approx(-12.35)
-        assert row['本年当前回撤(%)'] == '-'
+        assert row['最新累计净值'] == '1.2346'
+        assert row['WTD'] == '1.23%'
+        assert row['MTD'] == '-'
+        assert row['YTD'] == '-5.68%'
+        assert row['本年最大回撤'] == '-12.35%'
+        assert row['本年当前回撤'] == '-'
 
     def test_metric_formatting_uses_percentages_and_dash_for_undefined_values(self):
         page = _load_strategy_page_module()
@@ -215,14 +215,85 @@ class TestMetricsHighlighting:
         row = formatted.iloc[0]
 
         assert row['收益序列'] == 'strategy'
-        assert row['年化收益率(%)'] == pytest.approx(12.35)
-        assert row['年化波动率(%)'] == '-'
-        assert row['超额年化收益率(%)'] == pytest.approx(2.35)
-        assert row['夏普率'] == pytest.approx(1.2346)
-        assert row['最大回撤(%)'] == pytest.approx(-5.68)
+        assert row['年化收益率'] == '12.35%'
+        assert row['年化波动率'] == '-'
+        assert row['超额年化收益率'] == '2.35%'
+        assert row['超额年化波动率'] == '-'
+        assert row['夏普率'] == '1.23'
+        assert row['最大回撤'] == '-5.68%'
         assert row['索提诺比率'] == '-'
-        assert row['Alpha(%)'] == pytest.approx(3.46)
-        assert row['Beta'] == pytest.approx(0.9876)
+        assert row['卡玛比率'] == '-'
+        assert row['信息比例'] == '-'
+        assert row['Alpha'] == '3.46%'
+        assert row['Beta'] == '0.9877'
+
+    def test_metrics_are_split_into_core_and_benchmark_groups(self):
+        page = _load_strategy_page_module()
+        metrics = pl.DataFrame({
+            'series': ['strategy'],
+            'annualized_return': [0.12346],
+            'annualized_volatility': [0.22346],
+            'excess_annualized_return': [0.02346],
+            'excess_annualized_volatility': [0.12346],
+            'sharpe_ratio': [1.23456],
+            'max_drawdown': [-0.05678],
+            'sortino_ratio': [1.34567],
+            'calmar_ratio': [2.34567],
+            'information_ratio': [0.45678],
+            'alpha': [0.03457],
+            'beta': [0.98765],
+        })
+
+        core = page._format_core_metrics(metrics)
+        benchmark = page._format_benchmark_metrics(metrics)
+
+        assert core.columns.to_list() == [
+            '收益序列',
+            '年化收益率',
+            '年化波动率',
+            '夏普率',
+            '最大回撤',
+            '索提诺比率',
+            '卡玛比率',
+        ]
+        assert benchmark.columns.to_list() == [
+            '收益序列',
+            '超额年化收益率',
+            '超额年化波动率',
+            '信息比例',
+            'Alpha',
+            'Beta',
+        ]
+
+    def test_dataframe_column_configs_cover_display_columns(self):
+        page = _load_strategy_page_module()
+
+        assert set(page._recent_returns_column_config()) == {
+            '收益序列',
+            '最新累计净值',
+            'WTD',
+            'MTD',
+            'YTD',
+            '本年最大回撤',
+            '本年当前回撤',
+        }
+        assert set(page._core_metrics_column_config()) == {
+            '收益序列',
+            '年化收益率',
+            '年化波动率',
+            '夏普率',
+            '最大回撤',
+            '索提诺比率',
+            '卡玛比率',
+        }
+        assert set(page._benchmark_metrics_column_config()) == {
+            '收益序列',
+            '超额年化收益率',
+            '超额年化波动率',
+            '信息比例',
+            'Alpha',
+            'Beta',
+        }
 
     def test_undefined_metrics_do_not_participate_in_ranking(self):
         page = _load_strategy_page_module()

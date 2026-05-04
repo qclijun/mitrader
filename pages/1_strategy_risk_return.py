@@ -180,10 +180,31 @@ def main():
     st.plotly_chart(fig, width='stretch')
 
     st.subheader('最近收益情况')
-    st.table(_format_recent_returns(recent_returns))
+    st.dataframe(
+        _format_recent_returns(recent_returns),
+        width='stretch',
+        hide_index=True,
+        column_config=_recent_returns_column_config(),
+    )
 
     st.subheader('风险收益评估')
-    st.table(_format_metrics(metrics).style.apply(_highlight_best_metrics, axis=None))
+    st.caption('核心指标')
+    st.dataframe(
+        _format_core_metrics(metrics),
+        width='stretch',
+        hide_index=True,
+        column_config=_core_metrics_column_config(),
+    )
+    if benchmark:
+        st.caption('基准指标')
+        st.dataframe(
+            _format_benchmark_metrics(metrics),
+            width='stretch',
+            hide_index=True,
+            column_config=_benchmark_metrics_column_config(),
+        )
+    else:
+        st.info('选择基准后显示超额收益、信息比例、Alpha 和 Beta')
 
 
 def prepare_strategy_tables(
@@ -308,40 +329,120 @@ def _format_percent(value: float) -> str:
 
 
 def _format_recent_returns(df: pl.DataFrame) -> pd.DataFrame:
-    return df.select([
+    formatted = df.select([
         pl.col('series').alias('收益序列'),
-        pl.col('latest_nav').round(4).alias('最新累计净值'),
-        (pl.col('wtd_return') * 100).round(2).alias('WTD(%)'),
-        (pl.col('mtd_return') * 100).round(2).alias('MTD(%)'),
-        (pl.col('ytd_return') * 100).round(2).alias('YTD(%)'),
-        (pl.col('year_max_drawdown') * 100).round(2).alias('本年最大回撤(%)'),
-        (pl.col('current_drawdown') * 100).round(2).alias('本年当前回撤(%)'),
-    ]).to_pandas().fillna('-')
+        pl.col('latest_nav').cast(pl.Float64, strict=False).alias('最新累计净值'),
+        pl.col('wtd_return').cast(pl.Float64, strict=False).alias('WTD'),
+        pl.col('mtd_return').cast(pl.Float64, strict=False).alias('MTD'),
+        pl.col('ytd_return').cast(pl.Float64, strict=False).alias('YTD'),
+        pl.col('year_max_drawdown').cast(pl.Float64, strict=False).alias('本年最大回撤'),
+        pl.col('current_drawdown').cast(pl.Float64, strict=False).alias('本年当前回撤'),
+    ]).to_pandas()
+    return _format_display_dataframe(
+        formatted,
+        percent_columns=['WTD', 'MTD', 'YTD', '本年最大回撤', '本年当前回撤'],
+        number_columns={'最新累计净值': 4},
+    )
 
 
 def _format_metrics(df: pl.DataFrame) -> pd.DataFrame:
-    return df.select([
+    return pd.concat([
+        _format_core_metrics(df),
+        _format_benchmark_metrics(df).drop(columns=['收益序列']),
+    ], axis=1)
+
+
+def _format_core_metrics(df: pl.DataFrame) -> pd.DataFrame:
+    formatted = df.select([
         pl.col('series').alias('收益序列'),
-        _percent_col('annualized_return', '年化收益率(%)'),
-        _percent_col('annualized_volatility', '年化波动率(%)'),
-        _percent_col('excess_annualized_return', '超额年化收益率(%)'),
-        _percent_col('excess_annualized_volatility', '超额年化波动率(%)'),
-        _number_col('sharpe_ratio', '夏普率'),
-        _percent_col('max_drawdown', '最大回撤(%)'),
-        _number_col('sortino_ratio', '索提诺比率'),
-        _number_col('calmar_ratio', '卡玛比率'),
-        _number_col('information_ratio', '信息比例'),
-        _percent_col('alpha', 'Alpha(%)'),
-        _number_col('beta', 'Beta'),
-    ]).to_pandas().fillna('-')
+        pl.col('annualized_return').cast(pl.Float64, strict=False).alias('年化收益率'),
+        pl.col('annualized_volatility').cast(pl.Float64, strict=False).alias('年化波动率'),
+        pl.col('sharpe_ratio').cast(pl.Float64, strict=False).alias('夏普率'),
+        pl.col('max_drawdown').cast(pl.Float64, strict=False).alias('最大回撤'),
+        pl.col('sortino_ratio').cast(pl.Float64, strict=False).alias('索提诺比率'),
+        pl.col('calmar_ratio').cast(pl.Float64, strict=False).alias('卡玛比率'),
+    ]).to_pandas()
+    return _format_display_dataframe(
+        formatted,
+        percent_columns=['年化收益率', '年化波动率', '最大回撤'],
+        number_columns={'夏普率': 2, '索提诺比率': 2, '卡玛比率': 2},
+    )
 
 
-def _percent_col(source: str, alias: str) -> pl.Expr:
-    return (pl.col(source).cast(pl.Float64, strict=False) * 100).round(2).alias(alias)
+def _format_benchmark_metrics(df: pl.DataFrame) -> pd.DataFrame:
+    formatted = df.select([
+        pl.col('series').alias('收益序列'),
+        pl.col('excess_annualized_return').cast(pl.Float64, strict=False).alias('超额年化收益率'),
+        pl.col('excess_annualized_volatility').cast(pl.Float64, strict=False).alias('超额年化波动率'),
+        pl.col('information_ratio').cast(pl.Float64, strict=False).alias('信息比例'),
+        pl.col('alpha').cast(pl.Float64, strict=False).alias('Alpha'),
+        pl.col('beta').cast(pl.Float64, strict=False).alias('Beta'),
+    ]).to_pandas()
+    return _format_display_dataframe(
+        formatted,
+        percent_columns=['超额年化收益率', '超额年化波动率', 'Alpha'],
+        number_columns={'信息比例': 2, 'Beta': 4},
+    )
 
 
-def _number_col(source: str, alias: str) -> pl.Expr:
-    return pl.col(source).cast(pl.Float64, strict=False).round(4).alias(alias)
+def _format_display_dataframe(
+    data: pd.DataFrame,
+    percent_columns: list[str],
+    number_columns: dict[str, int],
+) -> pd.DataFrame:
+    formatted = data.copy()
+    for column in percent_columns:
+        formatted[column] = formatted[column].map(_format_percentage_cell)
+    for column, decimals in number_columns.items():
+        formatted[column] = formatted[column].map(lambda value, d=decimals: _format_number_cell(value, d))
+    return formatted
+
+
+def _format_percentage_cell(value: Any) -> str:
+    if pd.isna(value):
+        return '-'
+    return f'{float(value) * 100:.2f}%'
+
+
+def _format_number_cell(value: Any, decimals: int) -> str:
+    if pd.isna(value):
+        return '-'
+    return f'{float(value):.{decimals}f}'
+
+
+def _recent_returns_column_config() -> dict[str, Any]:
+    return {
+        '收益序列': st.column_config.TextColumn('收益序列', width='medium', pinned=True),
+        '最新累计净值': st.column_config.TextColumn('最新累计净值', width='small'),
+        'WTD': st.column_config.TextColumn('WTD', width='small'),
+        'MTD': st.column_config.TextColumn('MTD', width='small'),
+        'YTD': st.column_config.TextColumn('YTD', width='small'),
+        '本年最大回撤': st.column_config.TextColumn('本年最大回撤', width='small'),
+        '本年当前回撤': st.column_config.TextColumn('本年当前回撤', width='small'),
+    }
+
+
+def _core_metrics_column_config() -> dict[str, Any]:
+    return {
+        '收益序列': st.column_config.TextColumn('收益序列', width='medium', pinned=True),
+        '年化收益率': st.column_config.TextColumn('年化收益率', width='small'),
+        '年化波动率': st.column_config.TextColumn('年化波动率', width='small'),
+        '夏普率': st.column_config.TextColumn('夏普率', width='small'),
+        '最大回撤': st.column_config.TextColumn('最大回撤', width='small'),
+        '索提诺比率': st.column_config.TextColumn('索提诺比率', width='small'),
+        '卡玛比率': st.column_config.TextColumn('卡玛比率', width='small'),
+    }
+
+
+def _benchmark_metrics_column_config() -> dict[str, Any]:
+    return {
+        '收益序列': st.column_config.TextColumn('收益序列', width='medium', pinned=True),
+        '超额年化收益率': st.column_config.TextColumn('超额年化收益率', width='small'),
+        '超额年化波动率': st.column_config.TextColumn('超额年化波动率', width='small'),
+        '信息比例': st.column_config.TextColumn('信息比例', width='small'),
+        'Alpha': st.column_config.TextColumn('Alpha', width='small'),
+        'Beta': st.column_config.TextColumn('Beta', width='small'),
+    }
 
 
 def _highlight_best_metrics(data: pd.DataFrame) -> pd.DataFrame:
@@ -386,7 +487,8 @@ def _highlight_best_metrics(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def _numeric_column(series: pd.Series) -> pd.Series:
-    return pd.to_numeric(series.replace('-', None), errors='coerce').dropna()
+    cleaned = series.astype(str).str.rstrip('%').replace('-', None)
+    return pd.to_numeric(cleaned, errors='coerce').dropna()
 
 
 if __name__ == '__main__':
