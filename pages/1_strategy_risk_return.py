@@ -20,6 +20,8 @@ from src.pnl_loader import get_return_columns, load_pnl_data
 
 
 RANGE_OPTIONS = ['全部', '最近 5 年', '最近 3 年', '最近 1 年', 'YTD', '自定义']
+BEST_RETURN_STYLE = 'background-color: #dcfce7; color: #166534'
+BEST_RISK_STYLE = 'background-color: #dbeafe; color: #1e40af'
 SUMMARY_STYLE = """
 <style>
 .summary-grid {
@@ -189,8 +191,9 @@ def main():
 
     st.subheader('风险收益评估')
     st.caption('核心指标')
+    neutral_series = [benchmark] if benchmark else []
     st.dataframe(
-        _format_core_metrics(metrics),
+        _style_metric_table(_format_core_metrics(metrics), neutral_series=neutral_series),
         width='stretch',
         hide_index=True,
         column_config=_core_metrics_column_config(),
@@ -198,7 +201,7 @@ def main():
     if benchmark:
         st.caption('基准指标')
         st.dataframe(
-            _format_benchmark_metrics(metrics),
+            _style_metric_table(_format_benchmark_metrics(metrics), neutral_series=neutral_series),
             width='stretch',
             hide_index=True,
             column_config=_benchmark_metrics_column_config(),
@@ -445,43 +448,63 @@ def _benchmark_metrics_column_config() -> dict[str, Any]:
     }
 
 
-def _highlight_best_metrics(data: pd.DataFrame) -> pd.DataFrame:
+def _style_metric_table(data: pd.DataFrame, neutral_series: list[str] | None = None) -> Any:
+    return data.style.apply(
+        _highlight_best_metrics,
+        axis=None,
+        neutral_series=neutral_series or [],
+    )
+
+
+def _highlight_best_metrics(
+    data: pd.DataFrame,
+    neutral_series: list[str] | None = None,
+) -> pd.DataFrame:
     styles = pd.DataFrame('', index=data.index, columns=data.columns)
+    if len(data.index) <= 1:
+        return styles
+
+    eligible_rows = pd.Series(True, index=data.index)
+    if neutral_series and '收益序列' in data.columns:
+        eligible_rows = ~data['收益序列'].isin(neutral_series)
+    if eligible_rows.sum() <= 1:
+        return styles
+
     higher_better = [
-        '年化收益率(%)',
-        '超额年化收益率(%)',
+        '年化收益率',
+        '超额年化收益率',
         '夏普率',
         '索提诺比率',
         '卡玛比率',
         '信息比例',
-        'Alpha(%)',
+        'Alpha',
     ]
     lower_better = [
-        '年化波动率(%)',
-        '超额年化波动率(%)',
+        '年化波动率',
+        '超额年化波动率',
     ]
-    closest_to_zero = ['最大回撤(%)']
+    closest_to_zero = ['最大回撤']
 
     for col in higher_better:
         if col not in data.columns:
             continue
-        numeric = _numeric_column(data[col])
+        numeric = _numeric_column(data.loc[eligible_rows, col])
         if not numeric.empty:
-            styles.loc[numeric.idxmax(), col] = 'background-color: #d4edda'
+            styles.loc[numeric.idxmax(), col] = BEST_RETURN_STYLE
 
     for col in lower_better:
         if col not in data.columns:
             continue
-        numeric = _numeric_column(data[col])
+        numeric = _numeric_column(data.loc[eligible_rows, col])
         if not numeric.empty:
-            styles.loc[numeric.idxmin(), col] = 'background-color: #d4edda'
+            styles.loc[numeric.idxmin(), col] = BEST_RISK_STYLE
 
     for col in closest_to_zero:
         if col not in data.columns:
             continue
-        numeric = _numeric_column(data[col])
+        numeric = _numeric_column(data.loc[eligible_rows, col])
         if not numeric.empty:
-            styles.loc[numeric.abs().idxmin(), col] = 'background-color: #d4edda'
+            styles.loc[numeric.abs().idxmin(), col] = BEST_RISK_STYLE
 
     return styles
 

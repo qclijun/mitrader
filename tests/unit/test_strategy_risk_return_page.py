@@ -299,13 +299,59 @@ class TestMetricsHighlighting:
         page = _load_strategy_page_module()
         data = pd.DataFrame({
             '收益序列': ['benchmark', 'strategy'],
-            '超额年化收益率(%)': ['-', 2.5],
-            '最大回撤(%)': ['-', -4.0],
+            '超额年化收益率': ['-', '2.50%'],
+            '最大回撤': ['-', '-4.00%'],
         })
 
         styles = page._highlight_best_metrics(data)
 
-        assert styles.loc[0, '超额年化收益率(%)'] == ''
-        assert styles.loc[0, '最大回撤(%)'] == ''
-        assert styles.loc[1, '超额年化收益率(%)'] == 'background-color: #d4edda'
-        assert styles.loc[1, '最大回撤(%)'] == 'background-color: #d4edda'
+        assert styles.loc[0, '超额年化收益率'] == ''
+        assert styles.loc[0, '最大回撤'] == ''
+        assert styles.loc[1, '超额年化收益率'] == page.BEST_RETURN_STYLE
+        assert styles.loc[1, '最大回撤'] == page.BEST_RISK_STYLE
+
+    def test_metric_highlighting_uses_directional_subtle_colors(self):
+        page = _load_strategy_page_module()
+        data = pd.DataFrame({
+            '收益序列': ['strategy_a', 'strategy_b'],
+            '年化收益率': ['10.00%', '12.00%'],
+            '年化波动率': ['8.00%', '6.00%'],
+            '最大回撤': ['-5.00%', '-8.00%'],
+            '夏普率': ['1.20', '1.10'],
+        })
+
+        styles = page._highlight_best_metrics(data)
+
+        assert styles.loc[1, '年化收益率'] == page.BEST_RETURN_STYLE
+        assert styles.loc[1, '年化波动率'] == page.BEST_RISK_STYLE
+        assert styles.loc[0, '最大回撤'] == page.BEST_RISK_STYLE
+        assert styles.loc[0, '夏普率'] == page.BEST_RETURN_STYLE
+        assert styles.loc[0, '年化收益率'] == ''
+        assert styles.loc[0, '年化波动率'] == ''
+
+    def test_metric_highlighting_skips_single_row_tables(self):
+        page = _load_strategy_page_module()
+        data = pd.DataFrame({
+            '收益序列': ['strategy'],
+            '年化收益率': ['10.00%'],
+            '最大回撤': ['-5.00%'],
+        })
+
+        styles = page._highlight_best_metrics(data)
+
+        assert (styles == '').all().all()
+
+    def test_metric_highlighting_keeps_neutral_series_unhighlighted(self):
+        page = _load_strategy_page_module()
+        data = pd.DataFrame({
+            '收益序列': ['strategy_a', 'strategy_b', 'benchmark'],
+            '年化收益率': ['10.00%', '12.00%', '20.00%'],
+            '最大回撤': ['-8.00%', '-5.00%', '-1.00%'],
+        })
+
+        styles = page._highlight_best_metrics(data, neutral_series=['benchmark'])
+
+        assert styles.loc[2, '年化收益率'] == ''
+        assert styles.loc[2, '最大回撤'] == ''
+        assert styles.loc[1, '年化收益率'] == page.BEST_RETURN_STYLE
+        assert styles.loc[1, '最大回撤'] == page.BEST_RISK_STYLE
