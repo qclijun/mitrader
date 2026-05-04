@@ -36,6 +36,15 @@ class TestBuildNavDrawdownChart:
         assert fig.layout.hovermode == 'x unified'
         assert fig.layout.legend.orientation == 'h'
         assert fig.layout.legend.font.color == '#111827'
+        assert fig.layout.xaxis2.tickfont.color == '#374151'
+        assert fig.layout.xaxis2.tickfont.size == 12
+        assert fig.layout.xaxis2.title.font.color == '#111827'
+        assert fig.layout.yaxis.tickfont.color == '#374151'
+        assert fig.layout.yaxis.tickfont.size == 12
+        assert fig.layout.yaxis.title.font.color == '#111827'
+        assert fig.layout.yaxis2.tickfont.color == '#374151'
+        assert fig.layout.yaxis2.tickfont.size == 12
+        assert fig.layout.yaxis2.title.font.color == '#111827'
 
     def test_build_nav_drawdown_chart_uses_consistent_colors(self):
         df = pl.DataFrame({

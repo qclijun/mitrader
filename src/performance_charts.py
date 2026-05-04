@@ -96,26 +96,41 @@ def build_nav_drawdown_chart(
     )
     fig.update_yaxes(
         title_text='净值',
+        title_font=dict(color='#111827', size=13),
+        tickfont=dict(color='#374151', size=12),
         gridcolor='rgba(17, 24, 39, 0.08)',
         zeroline=False,
+        automargin=True,
         row=1,
         col=1,
     )
     fig.update_yaxes(
         title_text='回撤',
+        title_font=dict(color='#111827', size=13),
+        tickfont=dict(color='#374151', size=12),
         tickformat='.1%',
         gridcolor='rgba(17, 24, 39, 0.08)',
         zeroline=False,
+        automargin=True,
         row=2,
         col=1,
     )
     fig.update_xaxes(
         title_text='日期',
+        title_font=dict(color='#111827', size=13),
+        tickfont=dict(color='#374151', size=12),
         gridcolor='rgba(17, 24, 39, 0.06)',
+        automargin=True,
         row=2,
         col=1,
     )
-    fig.update_xaxes(gridcolor='rgba(17, 24, 39, 0.06)', row=1, col=1)
+    fig.update_xaxes(
+        tickfont=dict(color='#374151', size=12),
+        gridcolor='rgba(17, 24, 39, 0.06)',
+        automargin=True,
+        row=1,
+        col=1,
+    )
 
     return fig
 
